@@ -1,10 +1,10 @@
 ---
-name: setup-tsda-skills
+name: prepare-repo
 description: Sets up an `## Agent skills` block in `AGENTS.md` and `docs/agents/` so the engineering skills know this repo's local markdown issue tracker, triage status vocabulary, and domain doc layout.
 disable-model-invocation: true
 ---
 
-# Setup TSDA Skills
+# Prepare Repo
 
 Scaffold the per-repo configuration that the engineering skills assume:
 
