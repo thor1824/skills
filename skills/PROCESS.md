@@ -31,9 +31,11 @@ This repo defines a local Markdown issue process for TSDA engineering skills.
    - Writes agent briefs when an issue becomes `ready-for-agent`.
    - Writes `.out-of-scope/` records when an enhancement is rejected as `wontfix`.
 
-6. Implementation skills
-   - Consume the same domain docs and issue contracts.
-   - They should use `CONTEXT.md`/`CONTEXT-MAP.md`, ADRs, and `docs/agents/*.md` before changing code.
+6. `skills/orchestrate-prd`
+   - Drives one PRD to completion by repeatedly claiming `ready-for-agent` issues, creating worktrees, and delegating each issue to the `issue-implementer` subagent.
+   - Consumes the same domain docs and issue contracts, using `CONTEXT.md`/`CONTEXT-MAP.md`, ADRs, and `docs/agents/*.md` before changing code.
+   - Merges successful issue results, surfaces failures for human follow-up, and moves blocked issues to `needs-info` when information is missing.
+   - Marks the PRD done only after all issues are terminal and PRD coverage review passes.
 
 ## Shared contracts
 
