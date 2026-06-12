@@ -5,13 +5,56 @@ const fs = require("fs");
 const path = require("path");
 
 const DEFAULT_HASH_LEN = 6;
-const DEFAULT_STATUSES = {
+const STATUS_PROPERTY_TO_CANONICAL = {
   done: "done",
   inProgress: "in-progress",
   needsInfo: "needs-info",
+  needsTriage: "needs-triage",
   readyForAgent: "ready-for-agent",
+  readyForHuman: "ready-for-human",
   wontfix: "wontfix",
 };
+const REQUIRED_STATUS_PROPERTIES = [
+  "done",
+  "inProgress",
+  "needsInfo",
+  "readyForAgent",
+  "readyForHuman",
+  "wontfix",
+];
+const DEFAULT_REPORT_PATH = ".codex/orchestrate-prd/report.md";
+const STOPWORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "by",
+  "for",
+  "from",
+  "i",
+  "if",
+  "in",
+  "into",
+  "is",
+  "it",
+  "of",
+  "on",
+  "or",
+  "so",
+  "that",
+  "the",
+  "their",
+  "them",
+  "then",
+  "there",
+  "this",
+  "to",
+  "want",
+  "with",
+]);
 const FRONTMATTER_KEY_ORDER = [
   "type",
   "status",
@@ -31,6 +74,8 @@ function usage() {
     "  node scripts/orchestrate-prd.js create-worktrees --prd <PRD.md> [--mark-in-progress] [--limit N] [--base REF] [--root DIR] [--dry-run] [--pretty]",
     "  node scripts/orchestrate-prd.js create-worktrees <issue.md>... [--base REF] [--root DIR] [--dry-run] [--pretty]",
     "  node scripts/orchestrate-prd.js merge-worktree --issue <issue.md> --report <report.md> [--verify-command CMD] [--delete-branch] [--pretty]",
+    "  node scripts/orchestrate-prd.js write-report --issue <issue.md> [--report <report.md>] (--output TEXT | --output-file <file> | --output-base64 <value>) [--pretty]",
+    "  node scripts/orchestrate-prd.js review-prd --prd <PRD.md> [--pretty]",
     "  node scripts/orchestrate-prd.js mark-done --prd <PRD.md> [--pretty]",
     "  node scripts/orchestrate-prd.js mark-done --issue <issue.md> --evidence TEXT [--pretty]",
     "  node scripts/orchestrate-prd.js check-complete --prd <PRD.md> [--pretty]",
@@ -49,6 +94,12 @@ function commandUsage(command) {
     ],
     "merge-worktree": [
       "Usage: node scripts/orchestrate-prd.js merge-worktree --issue <issue.md> --report <report.md> [--verify-command CMD] [--delete-branch] [--pretty]",
+    ],
+    "write-report": [
+      "Usage: node scripts/orchestrate-prd.js write-report --issue <issue.md> [--report <report.md>] (--output TEXT | --output-file <file> | --output-base64 <value>) [--pretty]",
+    ],
+    "review-prd": [
+      "Usage: node scripts/orchestrate-prd.js review-prd --prd <PRD.md> [--pretty]",
     ],
     "mark-done": [
       "Usage: node scripts/orchestrate-prd.js mark-done --prd <PRD.md> [--pretty]",
@@ -102,6 +153,89 @@ function repoRelativePath(repoRoot, filePath) {
     throw new ToolError(`path is outside repo: ${resolvedFile}`);
   }
   return relative.replace(/\\/g, "/");
+}
+
+function resolveRepoDocPath(anchorPath) {
+  let current = path.resolve(anchorPath);
+  if (fs.existsSync(current) && fs.statSync(current).isFile()) {
+    current = path.dirname(current);
+  }
+
+  while (true) {
+    const candidate = path.join(current, "docs", "agents", "triage-labels.md");
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+      return candidate;
+    }
+
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return null;
+    }
+    current = parent;
+  }
+}
+
+function parseStatusMappingTable(text) {
+  const mapping = {};
+
+  for (const line of String(text || "").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("|")) {
+      continue;
+    }
+
+    const cells = trimmed
+      .split("|")
+      .slice(1, -1)
+      .map((cell) => cell.trim());
+    if (cells.length < 2 || cells.every((cell) => /^:?-{3,}:?$/.test(cell))) {
+      continue;
+    }
+
+    const canonical = cells[0].replace(/`/g, "").trim();
+    const trackerValue = cells[1].replace(/`/g, "").trim();
+    if (!canonical || canonical.toLowerCase() === "canonical state" || !trackerValue) {
+      continue;
+    }
+
+    mapping[canonical] = trackerValue;
+  }
+
+  return mapping;
+}
+
+function loadMappedStatuses(anchorPath) {
+  const mappingPath = resolveRepoDocPath(anchorPath);
+  if (!mappingPath) {
+    throw new ToolError(
+      "triage status mapping not found at docs/agents/triage-labels.md. Run /prepare-repo to bootstrap repo-specific tracker docs.",
+    );
+  }
+
+  const rawMapping = parseStatusMappingTable(fs.readFileSync(mappingPath, "utf8"));
+  const missing = REQUIRED_STATUS_PROPERTIES.filter(
+    (property) => !rawMapping[STATUS_PROPERTY_TO_CANONICAL[property]],
+  );
+  if (missing.length > 0) {
+    throw new ToolError(
+      `triage status mapping in ${mappingPath} is missing canonical states: ${missing
+        .map((property) => STATUS_PROPERTY_TO_CANONICAL[property])
+        .join(", ")}. Run /prepare-repo to refresh the repo-specific tracker docs.`,
+    );
+  }
+
+  return Object.fromEntries(
+    Object.entries(STATUS_PROPERTY_TO_CANONICAL)
+      .filter(([, canonical]) => rawMapping[canonical])
+      .map(([property, canonical]) => [property, rawMapping[canonical]]),
+  );
+}
+
+function resolveStatuses(anchorPath, overrides = {}) {
+  return {
+    ...loadMappedStatuses(anchorPath),
+    ...Object.fromEntries(Object.entries(overrides).filter(([, value]) => value)),
+  };
 }
 
 function listMarkdownFiles(root) {
@@ -463,7 +597,7 @@ function findLatestAgentBrief(text) {
 
   let end = lines.length;
   for (let index = start + 1; index < lines.length; index += 1) {
-    if (/^##\s+\S/.test(lines[index]) && !/^##\s+Agent Brief\s*$/i.test(lines[index].trim())) {
+    if (/^##\s+Agent Brief\s*$/i.test(lines[index].trim())) {
       end = index;
       break;
     }
@@ -611,12 +745,11 @@ function loadLegacyScope(root) {
 
 function parseFindReadyArgs(args) {
   const options = {
-    doneStatus: DEFAULT_STATUSES.done,
+    doneStatus: null,
     help: false,
-    inProgressStatus: DEFAULT_STATUSES.inProgress,
     pretty: false,
     prd: null,
-    readyStatus: DEFAULT_STATUSES.readyForAgent,
+    readyStatus: null,
     root: null,
   };
 
@@ -659,18 +792,26 @@ function cmdFindReady(args) {
   }
 
   const scope = options.prd ? loadPrdScope(options.prd) : loadLegacyScope(options.root);
-  const result = evaluateReadyIssues(scope.index, options);
+  const statuses = resolveStatuses(options.prd || options.root || scope.issueRoot, {
+    done: options.doneStatus,
+    readyForAgent: options.readyStatus,
+  });
+  const result = evaluateReadyIssues(scope.index, {
+    doneStatus: statuses.done,
+    inProgressStatus: statuses.inProgress,
+    readyStatus: statuses.readyForAgent,
+  });
   const output = {
     blocked: result.blocked,
     claimed: result.claimed,
-    done_status: options.doneStatus,
+    done_status: statuses.done,
     errors: scope.index.errors,
     issue_root: scope.issueRoot,
     launchable: result.launchable,
     not_launchable: result.not_launchable,
     prd_path: scope.prdPath,
     ready: result.launchable,
-    ready_status: options.readyStatus,
+    ready_status: statuses.readyForAgent,
     root: scope.issueRoot,
   };
 
@@ -877,12 +1018,12 @@ function parseCreateWorktreesArgs(args) {
   return options;
 }
 
-function issuePathsFromPrd(prdPath, limit) {
+function issuePathsFromPrd(prdPath, limit, statuses) {
   const scope = loadPrdScope(prdPath);
   const evaluated = evaluateReadyIssues(scope.index, {
-    doneStatus: DEFAULT_STATUSES.done,
-    inProgressStatus: DEFAULT_STATUSES.inProgress,
-    readyStatus: DEFAULT_STATUSES.readyForAgent,
+    doneStatus: statuses.done,
+    inProgressStatus: statuses.inProgress,
+    readyStatus: statuses.readyForAgent,
   });
   const selected = limit ? evaluated.launchable.slice(0, limit) : evaluated.launchable;
   return {
@@ -895,11 +1036,11 @@ function issuePathsFromPrd(prdPath, limit) {
   };
 }
 
-function markIssueInProgress(issuePath, entry) {
+function markIssueInProgress(issuePath, entry, statuses) {
   updateMarkdownFile(
     issuePath,
     (meta) => {
-      meta.status = DEFAULT_STATUSES.inProgress;
+      meta.status = statuses.inProgress;
       meta.branch = entry.branch;
       meta.worktree_path = entry.worktree_path;
     },
@@ -924,12 +1065,13 @@ function cmdCreateWorktrees(args) {
 
   const cwd = process.cwd();
   const repoRoot = findRepoRoot(cwd);
+  const statuses = resolveStatuses(repoRoot);
   const worktreeRoot = path.resolve(options.root || defaultWorktreeRoot(repoRoot));
   let issuePaths = options.issuePaths.slice();
   let prdDiscovery = null;
 
   if (options.prd) {
-    prdDiscovery = issuePathsFromPrd(options.prd, options.limit);
+    prdDiscovery = issuePathsFromPrd(options.prd, options.limit, statuses);
     if (issuePaths.length === 0) {
       issuePaths = prdDiscovery.issuePaths;
     }
@@ -959,7 +1101,7 @@ function cmdCreateWorktrees(args) {
       if (!options.dryRun) {
         createWorktree(repoRoot, entry);
         if (options.markInProgress) {
-          markIssueInProgress(path.resolve(repoRoot, entry.issue_path), entry);
+          markIssueInProgress(path.resolve(repoRoot, entry.issue_path), entry, statuses);
         }
       }
 
@@ -990,7 +1132,10 @@ function cmdCreateWorktrees(args) {
 }
 
 function parseAgentReport(reportPath) {
-  const text = fs.readFileSync(reportPath, "utf8");
+  return parseAgentReportText(fs.readFileSync(reportPath, "utf8"));
+}
+
+function parseAgentReportText(text) {
   const lines = text.split(/\r?\n/);
   const resultIndex = lines.findIndex((line) => /^##\s+Result\s*$/i.test(line.trim()));
   const hasAcceptanceCriteria = lines.some((line) =>
@@ -1013,6 +1158,7 @@ function parseAgentReport(reportPath) {
   return {
     hasAcceptanceCriteria,
     result,
+    text,
     valid: ["PASS", "FAIL", "BLOCKED"].includes(result) && hasAcceptanceCriteria,
   };
 }
@@ -1030,6 +1176,22 @@ function resolveReportPath(rawReportPath, worktreePath) {
   }
 
   throw new ToolError(`report not found: ${rawReportPath}`);
+}
+
+function resolveWritableReportPath(rawReportPath, worktreePath) {
+  if (!rawReportPath) {
+    return path.resolve(worktreePath, DEFAULT_REPORT_PATH);
+  }
+
+  if (path.isAbsolute(rawReportPath)) {
+    return path.resolve(rawReportPath);
+  }
+
+  return path.resolve(worktreePath, rawReportPath);
+}
+
+function ensureParentDir(filePath) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
 }
 
 function tail(value, maxLength = 4000) {
@@ -1064,6 +1226,20 @@ function gitStatus(worktreePath) {
   return requireGitOk(runGit(["status", "--porcelain"], worktreePath), "checking worktree status");
 }
 
+function normalizeReportText(text) {
+  return String(text || "").replace(/\r?\n/g, "\n").trimEnd() + "\n";
+}
+
+function releaseIssueForHuman(issuePath, evidenceLines, statuses) {
+  updateMarkdownFile(
+    issuePath,
+    (meta) => {
+      meta.status = statuses.readyForHuman;
+    },
+    evidenceLines,
+  );
+}
+
 function commitWorktreeChanges(worktreePath, issuePath, branch) {
   const status = gitStatus(worktreePath);
   if (!status.trim()) {
@@ -1088,22 +1264,22 @@ function commitWorktreeChanges(worktreePath, issuePath, branch) {
   return { committed: true, sha };
 }
 
-function markIssueDone(issuePath, evidenceLines) {
+function markIssueDone(issuePath, evidenceLines, statuses) {
   updateMarkdownFile(
     issuePath,
     (meta) => {
-      meta.status = DEFAULT_STATUSES.done;
+      meta.status = statuses.done;
       delete meta.worktree_path;
     },
     evidenceLines,
   );
 }
 
-function markIssueNeedsInfo(issuePath, evidenceLines) {
+function markIssueNeedsInfo(issuePath, evidenceLines, statuses) {
   updateMarkdownFile(
     issuePath,
     (meta) => {
-      meta.status = DEFAULT_STATUSES.needsInfo;
+      meta.status = statuses.needsInfo;
     },
     evidenceLines,
   );
@@ -1147,6 +1323,116 @@ function parseMergeWorktreeArgs(args) {
   return options;
 }
 
+function parseWriteReportArgs(args) {
+  const options = {
+    help: false,
+    issue: null,
+    output: null,
+    outputBase64: null,
+    outputFile: null,
+    pretty: false,
+    report: DEFAULT_REPORT_PATH,
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--help" || arg === "-h") {
+      options.help = true;
+    } else if (arg === "--pretty") {
+      options.pretty = true;
+    } else if (arg === "--issue") {
+      options.issue = takeValue(args, index, arg);
+      index += 1;
+    } else if (arg === "--report") {
+      options.report = takeValue(args, index, arg);
+      index += 1;
+    } else if (arg === "--output") {
+      options.output = takeValue(args, index, arg);
+      index += 1;
+    } else if (arg === "--output-file") {
+      options.outputFile = takeValue(args, index, arg);
+      index += 1;
+    } else if (arg === "--output-base64") {
+      options.outputBase64 = takeValue(args, index, arg);
+      index += 1;
+    } else {
+      throw new UsageError(`unexpected argument: ${arg}`);
+    }
+  }
+
+  return options;
+}
+
+function reportTextFromOptions(options, cwd) {
+  const provided = [options.output, options.outputFile, options.outputBase64].filter(
+    (value) => value !== null,
+  );
+  if (provided.length !== 1) {
+    throw new UsageError("write-report requires exactly one of --output, --output-file, or --output-base64");
+  }
+
+  if (options.output !== null) {
+    return options.output;
+  }
+  if (options.outputFile !== null) {
+    return fs.readFileSync(path.resolve(cwd, options.outputFile), "utf8");
+  }
+  return Buffer.from(options.outputBase64, "base64").toString("utf8");
+}
+
+function cmdWriteReport(args) {
+  const options = parseWriteReportArgs(args);
+  if (options.help) {
+    console.log(commandUsage("write-report"));
+    return 0;
+  }
+  if (!options.issue) {
+    throw new UsageError(commandUsage("write-report"));
+  }
+
+  const repoRoot = findRepoRoot(process.cwd());
+  const issuePath = path.resolve(process.cwd(), options.issue);
+  const issueRecord = loadMarkdownRecord(issuePath, repoRoot);
+  const worktreePath = issueRecord.frontmatter.worktree_path;
+  if (!worktreePath) {
+    throw new ToolError("issue is missing worktree_path front matter");
+  }
+  if (!fs.existsSync(worktreePath) || !fs.statSync(worktreePath).isDirectory()) {
+    throw new ToolError(`worktree not found: ${worktreePath}`);
+  }
+
+  const reportText = normalizeReportText(reportTextFromOptions(options, process.cwd()));
+  const parsed = parseAgentReportText(reportText);
+  const issueDisplayPath = repoRelativePath(repoRoot, issuePath);
+  const reportPath = resolveWritableReportPath(options.report, worktreePath);
+
+  if (!parsed.valid) {
+    emit(
+      {
+        issue_path: issueDisplayPath,
+        report_path: reportPath,
+        result: parsed.result,
+        status: "INVALID_REPORT",
+      },
+      options.pretty,
+    );
+    return 1;
+  }
+
+  ensureParentDir(reportPath);
+  fs.writeFileSync(reportPath, reportText, "utf8");
+  emit(
+    {
+      issue_path: issueDisplayPath,
+      report_path: reportPath,
+      result: parsed.result,
+      status: "REPORT_WRITTEN",
+    },
+    options.pretty,
+  );
+  return 0;
+}
+
 function cmdMergeWorktree(args) {
   const options = parseMergeWorktreeArgs(args);
   if (options.help) {
@@ -1158,6 +1444,7 @@ function cmdMergeWorktree(args) {
   }
 
   const repoRoot = findRepoRoot(process.cwd());
+  const statuses = resolveStatuses(repoRoot);
   const issuePath = path.resolve(process.cwd(), options.issue);
   const issueRecord = loadMarkdownRecord(issuePath, repoRoot);
   const branch = issueRecord.frontmatter.branch;
@@ -1188,10 +1475,10 @@ function cmdMergeWorktree(args) {
   }
 
   if (report.result === "FAIL") {
-    updateMarkdownFile(issuePath, () => {}, [
+    releaseIssueForHuman(issuePath, [
       "- Action: agent report failed",
       `- Report: \`${reportPath}\``,
-    ]);
+    ], statuses);
     emit({ issue_path: issueDisplayPath, report_path: reportPath, status: "FAILED" }, options.pretty);
     return 0;
   }
@@ -1200,7 +1487,7 @@ function cmdMergeWorktree(args) {
     markIssueNeedsInfo(issuePath, [
       "- Action: agent report blocked",
       `- Report: \`${reportPath}\``,
-    ]);
+    ], statuses);
     emit({ issue_path: issueDisplayPath, report_path: reportPath, status: "BLOCKED" }, options.pretty);
     return 0;
   }
@@ -1253,6 +1540,21 @@ function cmdMergeWorktree(args) {
   if (merge.status !== 0) {
     const message = processMessage(merge);
     const status = message.includes("CONFLICT") ? "MERGE_CONFLICT" : "MERGE_FAILED";
+    if (status === "MERGE_CONFLICT") {
+      markIssueNeedsInfo(issuePath, [
+        "- Action: merge conflict",
+        `- Branch: \`${branch}\``,
+        `- Worktree: \`${worktreePath}\``,
+        `- Report: \`${reportPath}\``,
+      ], statuses);
+    } else {
+      releaseIssueForHuman(issuePath, [
+        "- Action: merge failed",
+        `- Branch: \`${branch}\``,
+        `- Worktree: \`${worktreePath}\``,
+        `- Report: \`${reportPath}\``,
+      ], statuses);
+    }
     emit(
       {
         issue_path: issueDisplayPath,
@@ -1272,7 +1574,7 @@ function cmdMergeWorktree(args) {
     `- Report: \`${reportPath}\``,
     commit.sha ? `- Commit: \`${commit.sha}\`` : null,
     options.verifyCommand ? `- Verification: \`${options.verifyCommand}\`` : null,
-  ].filter(Boolean));
+  ].filter(Boolean), statuses);
 
   const cleanupErrors = [];
   if (!options.keepWorktree) {
@@ -1304,7 +1606,7 @@ function cmdMergeWorktree(args) {
   return cleanupErrors.length ? 1 : 0;
 }
 
-function completionForPrd(prdPath) {
+function completionForPrd(prdPath, statuses) {
   const scope = loadPrdScope(prdPath);
   const issues = scope.index.records.filter((record) => record.frontmatter.type === "Issue");
   const done = [];
@@ -1316,9 +1618,9 @@ function completionForPrd(prdPath) {
       path: toDisplayPath(scope.featureRoot, issue.filePath),
       status: issue.frontmatter.status || null,
     };
-    if (issue.frontmatter.status === DEFAULT_STATUSES.done) {
+    if (issue.frontmatter.status === statuses.done) {
       done.push(entry);
-    } else if (issue.frontmatter.status === DEFAULT_STATUSES.wontfix) {
+    } else if (issue.frontmatter.status === statuses.wontfix) {
       wontfix.push(entry);
     } else {
       nonTerminal.push(entry);
@@ -1334,6 +1636,242 @@ function completionForPrd(prdPath) {
     total: issues.length,
     wontfix,
   };
+}
+
+function extractSection(body, heading) {
+  const lines = String(body || "").split(/\r?\n/);
+  const headingPattern = new RegExp(`^##\\s+${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "i");
+  const startIndex = lines.findIndex((line) => headingPattern.test(line.trim()));
+  if (startIndex === -1) {
+    return "";
+  }
+
+  let endIndex = lines.length;
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    if (/^##\s+\S/.test(lines[index].trim())) {
+      endIndex = index;
+      break;
+    }
+  }
+
+  return lines.slice(startIndex + 1, endIndex).join("\n").trim();
+}
+
+function extractUserStories(prdRecord) {
+  const section = extractSection(prdRecord.doc.body, "User Stories");
+  if (!section) {
+    return [];
+  }
+
+  return section
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^\d+\.\s+/.test(line))
+    .map((line) => {
+      const match = line.match(/^(\d+)\.\s+(.*)$/);
+      return {
+        id: match[1],
+        text: match[2].trim(),
+      };
+    });
+}
+
+function storyTokens(text) {
+  return Array.from(
+    new Set(
+      String(text || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .split(/\s+/)
+        .filter((token) => token.length >= 4 && !STOPWORDS.has(token)),
+    ),
+  );
+}
+
+function issueCoverageText(issueRecord) {
+  return [
+    path.basename(issueRecord.filePath, path.extname(issueRecord.filePath)),
+    issueRecord.doc.body,
+  ].join("\n");
+}
+
+function parseExplicitStoryCoverage(issueRecord) {
+  const section = extractSection(issueRecord.doc.body, "User stories covered");
+  if (!section) {
+    return [];
+  }
+
+  const storyIds = new Set();
+  for (const line of section.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!/^\d+\.\s+/.test(trimmed)) {
+      continue;
+    }
+
+    const entry = trimmed.replace(/^\d+\.\s+/, "");
+    const matches = Array.from(
+      entry.matchAll(/\b(?:prd\s+)?stor(?:y|ies)\s*#?\s*(\d+)\b/gi),
+      (match) => match[1],
+    );
+    for (const storyId of matches) {
+      storyIds.add(storyId);
+    }
+  }
+
+  return Array.from(storyIds).sort((left, right) => Number(left) - Number(right));
+}
+
+function explicitCoverageIndex(issues, featureRoot) {
+  const coverage = new Map();
+
+  for (const issue of issues) {
+    for (const storyId of parseExplicitStoryCoverage(issue)) {
+      if (!coverage.has(storyId)) {
+        coverage.set(storyId, []);
+      }
+      coverage.get(storyId).push({
+        coverage_source: "explicit",
+        path: toDisplayPath(featureRoot, issue.filePath),
+        status: issue.frontmatter.status || null,
+      });
+    }
+  }
+
+  return coverage;
+}
+
+function findSupportingIssues(story, issues, featureRoot, coverageSource = "legacy-inferred") {
+  const tokens = storyTokens(story.text);
+  if (tokens.length === 0) {
+    return [];
+  }
+
+  const storyNumberPatterns = [
+    new RegExp(`\\buser stor(?:y|ies)\\s*${story.id}\\b`, "i"),
+    new RegExp(`\\bstory\\s*${story.id}\\b`, "i"),
+    new RegExp(`\\b${story.id}\\b\\s*[:.-]`, "i"),
+  ];
+
+  const matches = [];
+  for (const issue of issues) {
+    const text = issueCoverageText(issue);
+    const lowered = text.toLowerCase();
+    const overlap = tokens.filter((token) => lowered.includes(token));
+    const explicitMatch = storyNumberPatterns.some((pattern) => pattern.test(text));
+    if (!explicitMatch && overlap.length < Math.min(2, tokens.length)) {
+      continue;
+    }
+
+    matches.push({
+      coverage_source: coverageSource,
+      overlap,
+      path: toDisplayPath(featureRoot, issue.filePath),
+      status: issue.frontmatter.status || null,
+    });
+  }
+
+  matches.sort((left, right) => right.overlap.length - left.overlap.length || left.path.localeCompare(right.path));
+  return matches;
+}
+
+function reviewPrd(prdPath) {
+  const statuses = resolveStatuses(prdPath);
+  const completion = completionForPrd(prdPath, statuses);
+  const scope = loadPrdScope(prdPath);
+  const userStories = extractUserStories(scope.prd);
+  const terminalIssues = scope.index.records.filter((record) => {
+    if (record.frontmatter.type !== "Issue") {
+      return false;
+    }
+    return (
+      record.frontmatter.status === statuses.done ||
+      record.frontmatter.status === statuses.wontfix
+    );
+  });
+  const explicitCoverage = explicitCoverageIndex(terminalIssues, scope.featureRoot);
+  const legacyIssues = terminalIssues.filter((issue) => parseExplicitStoryCoverage(issue).length === 0);
+
+  const covered = [];
+  const uncovered = [];
+  let legacyFallbackUsed = false;
+
+  for (const story of userStories) {
+    const explicitSupport = explicitCoverage.get(story.id) || [];
+    const support =
+      explicitSupport.length > 0
+        ? explicitSupport
+        : findSupportingIssues(story, legacyIssues, scope.featureRoot, "legacy-inferred");
+    if (explicitSupport.length === 0 && support.length > 0) {
+      legacyFallbackUsed = true;
+    }
+    const entry = {
+      coverage_source: explicitSupport.length > 0 ? "explicit" : support.length > 0 ? "legacy-inferred" : null,
+      id: story.id,
+      story: story.text,
+      supporting_issues: support,
+    };
+    if (support.length > 0) {
+      covered.push(entry);
+    } else {
+      uncovered.push(entry);
+    }
+  }
+
+  return {
+    ...completion,
+    covered,
+    coverage_summary: {
+      explicit: covered.filter((entry) => entry.coverage_source === "explicit").length,
+      legacy_inferred: covered.filter((entry) => entry.coverage_source === "legacy-inferred").length,
+      uncovered: uncovered.length,
+    },
+    legacy_fallback_used: legacyFallbackUsed,
+    review_passed: completion.complete && uncovered.length === 0,
+    review_status: userStories.length === 0 ? "NO_USER_STORIES" : uncovered.length === 0 ? "PASS" : "COVERAGE_GAPS",
+    stories_total: userStories.length,
+    uncovered,
+  };
+}
+
+function parseReviewPrdArgs(args) {
+  const options = {
+    help: false,
+    pretty: false,
+    prd: null,
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--help" || arg === "-h") {
+      options.help = true;
+    } else if (arg === "--pretty") {
+      options.pretty = true;
+    } else if (arg === "--prd") {
+      options.prd = takeValue(args, index, arg);
+      index += 1;
+    } else if (!arg.startsWith("--") && !options.prd) {
+      options.prd = arg;
+    } else {
+      throw new UsageError(`unexpected argument: ${arg}`);
+    }
+  }
+
+  return options;
+}
+
+function cmdReviewPrd(args) {
+  const options = parseReviewPrdArgs(args);
+  if (options.help) {
+    console.log(commandUsage("review-prd"));
+    return 0;
+  }
+  if (!options.prd) {
+    throw new UsageError(commandUsage("review-prd"));
+  }
+
+  const result = reviewPrd(options.prd);
+  emit(result, options.pretty);
+  return result.complete && (result.review_passed || result.review_status === "NO_USER_STORIES") ? 0 : 1;
 }
 
 function parseCheckCompleteArgs(args) {
@@ -1372,7 +1910,7 @@ function cmdCheckComplete(args) {
     throw new UsageError(commandUsage("check-complete"));
   }
 
-  const result = completionForPrd(options.prd);
+  const result = completionForPrd(options.prd, resolveStatuses(options.prd));
   emit(result, options.pretty);
   return result.errors.length ? 1 : 0;
 }
@@ -1436,28 +1974,36 @@ function cmdMarkDone(args) {
   }
 
   if (options.prd) {
-    const completion = completionForPrd(options.prd);
-    if (!completion.complete) {
+    const review = reviewPrd(options.prd);
+    if (!review.review_passed) {
       emit(
         {
-          ...completion,
+          ...review,
           marked: false,
-          status: completion.total === 0 ? "NO_ISSUES" : "INCOMPLETE",
+          status:
+            review.total === 0
+              ? "NO_ISSUES"
+              : review.complete
+                ? "REVIEW_FAILED"
+                : "INCOMPLETE",
         },
         options.pretty,
       );
       return 0;
     }
 
-    updateMarkdownFile(completion.prd_path, (meta) => {
-      meta.status = DEFAULT_STATUSES.done;
+    const statuses = resolveStatuses(review.prd_path);
+    updateMarkdownFile(review.prd_path, (meta) => {
+      meta.status = statuses.done;
     }, [
       "- Action: PRD marked done",
-      `- Issues done: ${completion.done.length}`,
-      `- Issues wontfix: ${completion.wontfix.length}`,
+      `- Issues done: ${review.done.length}`,
+      `- Issues wontfix: ${review.wontfix.length}`,
+      `- User stories covered: ${review.covered.length}/${review.stories_total}`,
+      `- Coverage source: explicit ${review.coverage_summary.explicit}, legacy-inferred ${review.coverage_summary.legacy_inferred}`,
     ]);
 
-    emit({ ...completion, marked: true, status: "DONE" }, options.pretty);
+    emit({ ...review, marked: true, status: "DONE" }, options.pretty);
     return 0;
   }
 
@@ -1466,13 +2012,14 @@ function cmdMarkDone(args) {
   }
 
   const repoRoot = findRepoRoot(process.cwd());
+  const statuses = resolveStatuses(repoRoot);
   const issuePath = path.resolve(process.cwd(), options.issue);
   const issueDisplayPath = repoRelativePath(repoRoot, issuePath);
   markIssueDone(issuePath, [
     "- Action: issue marked done",
     options.evidence ? `- Evidence: ${options.evidence}` : null,
     options.report ? `- Report: \`${path.resolve(process.cwd(), options.report)}\`` : null,
-  ].filter(Boolean));
+  ].filter(Boolean), statuses);
 
   emit({ issue_path: issueDisplayPath, marked: true, status: "DONE" }, options.pretty);
   return 0;
@@ -1493,6 +2040,12 @@ function dispatch(argv) {
   }
   if (command === "merge-worktree") {
     return cmdMergeWorktree(args);
+  }
+  if (command === "write-report") {
+    return cmdWriteReport(args);
+  }
+  if (command === "review-prd") {
+    return cmdReviewPrd(args);
   }
   if (command === "mark-done") {
     return cmdMarkDone(args);

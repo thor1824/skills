@@ -4,7 +4,7 @@ This repo defines a local Markdown issue process for TSDA engineering skills.
 
 ## Normal flow
 
-1. `/setup-tsda-skills`
+1. `/prepare-repo`
    - Bootstraps repo-specific contracts in `AGENTS.md` and `docs/agents/`.
    - Defines where local issues live, which front matter `status` values are valid, and how domain docs are read.
 
@@ -51,5 +51,6 @@ Each producer skill must emit the fields the next consumer needs. In practice:
 - Anything already classifiable should include exactly one front matter `category` value.
 - Anything with dependencies should include front matter `blocked_by`; use `blocked_by: []` for unblocked items.
 - `ready-for-human` means "human action required"; PRDs use it for `/to-issues` approval, while implementation issues use it for human delivery.
+- `ready-for-agent` means the mapped tracker `status` for canonical `ready-for-agent` plus a latest `## Agent Brief` with concrete acceptance criteria.
 - Anything resolved by `/grill-with-docs` should survive as `CONTEXT.md` terms, ADRs, issue comments, PRD text, or agent brief material.
 - Anything delegated to an AFK agent should include an agent brief with current behavior, desired behavior, key interfaces, acceptance criteria, and out-of-scope notes.

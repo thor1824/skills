@@ -7,7 +7,7 @@ description: Break a plan, spec, or PRD into independently-grabbable issues on t
 
 Break a plan into independently-grabbable issues using vertical slices (tracer bullets).
 
-The issue tracker and triage status vocabulary should have been provided to you — run `/setup-tsda-skills` if not. Before writing any `status` value in issue front matter, read `docs/agents/triage-labels.md` and use the tracker value mapped from the canonical state name.
+The issue tracker and triage status vocabulary should have been provided to you - run `/prepare-repo` if not. Before writing any `status` value in issue front matter, read `docs/agents/triage-labels.md` and use the tracker value mapped from the canonical state name.
 
 ## Process
 
@@ -38,7 +38,7 @@ Present the proposed breakdown as a numbered list. For each slice, show:
 - **Title**: short descriptive name
 - **Delivery**: HITL / AFK
 - **Blocked by**: which other slices (if any) must complete first
-- **User stories covered**: which user stories this addresses (if the source material has them)
+- **User stories covered**: the exact PRD story numbers this slice covers. Finalize these references before publishing.
 
 Ask the user:
 
@@ -77,6 +77,11 @@ A concise description of this vertical slice. Describe the end-to-end behavior, 
 - [ ] Criterion 2
 - [ ] Criterion 3
 
+## User stories covered
+
+1. PRD story 1 - Short reference to the story this issue covers
+2. PRD story 3 - Short reference if this slice covers another story
+
 ## Blocked by
 
 - List the same blocking ticket refs as `blocked_by` if extra explanation is useful.
@@ -84,5 +89,7 @@ A concise description of this vertical slice. Describe the end-to-end behavior, 
 Or "None - can start immediately" if `blocked_by` is empty.
 
 </issue-template>
+
+For new issues, `## User stories covered` is required whenever the source PRD has numbered user stories. Use explicit `PRD story <N>` references so downstream orchestration can review coverage without inference.
 
 Do NOT close or modify any parent issue.
