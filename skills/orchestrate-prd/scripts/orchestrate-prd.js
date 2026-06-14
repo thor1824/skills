@@ -3,6 +3,7 @@
 import childProcess from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,6 +29,7 @@ const REQUIRED_STATUS_PROPERTIES = [
   "wontfix",
 ];
 const DEFAULT_REPORT_PATH = ".codex/orchestrate-prd/report.md";
+const RUNTIME_STATE_VERSION = 1;
 const STOPWORDS = new Set([
   "a",
   "an",
@@ -158,6 +160,119 @@ function repoRelativePath(repoRoot, filePath) {
     throw new ToolError(`path is outside repo: ${resolvedFile}`);
   }
   return relative.replace(/\\/g, "/");
+}
+
+function runtimeStatePath(repoRoot) {
+  const repoId = crypto.createHash("sha1").update(path.resolve(repoRoot)).digest("hex").slice(0, 12);
+  return path.join(os.tmpdir(), `orchestrate-prd-${repoId}.json`);
+}
+
+function defaultRuntimeState(repoRoot) {
+  return {
+    active_workers: [],
+    issues: {},
+    last_update: null,
+    prd_path: null,
+    repo_root: path.resolve(repoRoot),
+    state_version: RUNTIME_STATE_VERSION,
+  };
+}
+
+function normalizeRuntimeIssueKey(issuePath, repoRoot) {
+  return repoRelativePath(repoRoot, issuePath).toLowerCase();
+}
+
+function normalizeIssueEntry(issuePath, entry, repoRoot) {
+  const normalizedIssuePath = repoRelativePath(repoRoot, issuePath);
+  return {
+    branch: entry.branch || null,
+    issue_path: normalizedIssuePath,
+    last_update: entry.last_update || new Date().toISOString(),
+    prd_path: entry.prd_path ? repoRelativePath(repoRoot, entry.prd_path) : null,
+    report_path: entry.report_path || null,
+    status: entry.status || "active",
+    worktree_path: entry.worktree_path ? path.resolve(entry.worktree_path) : null,
+    worker_id: entry.worker_id || null,
+  };
+}
+
+function loadRuntimeState(repoRoot) {
+  const statePath = runtimeStatePath(repoRoot);
+  if (!fs.existsSync(statePath)) {
+    return { path: statePath, state: defaultRuntimeState(repoRoot) };
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(statePath, "utf8"));
+  } catch (error) {
+    throw new ToolError(`invalid runtime state file: ${statePath}: ${error.message}`);
+  }
+
+  const state = {
+    ...defaultRuntimeState(repoRoot),
+    ...parsed,
+    issues: parsed && typeof parsed.issues === "object" && parsed.issues ? parsed.issues : {},
+  };
+  return { path: statePath, state };
+}
+
+function saveRuntimeState(runtime) {
+  runtime.state.last_update = new Date().toISOString();
+  ensureParentDir(runtime.path);
+  fs.writeFileSync(runtime.path, JSON.stringify(runtime.state, null, 2) + "\n", "utf8");
+}
+
+function clearRuntimeIssueState(runtime, issuePath, repoRoot) {
+  delete runtime.state.issues[normalizeRuntimeIssueKey(issuePath, repoRoot)];
+}
+
+function upsertRuntimeIssueState(runtime, issuePath, repoRoot, entry) {
+  runtime.state.issues[normalizeRuntimeIssueKey(issuePath, repoRoot)] = normalizeIssueEntry(
+    issuePath,
+    entry,
+    repoRoot,
+  );
+}
+
+function branchExists(repoRoot, branch) {
+  if (!branch) {
+    return false;
+  }
+  return runGit(["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], repoRoot).status === 0;
+}
+
+function isRuntimeClaimStale(entry, repoRoot) {
+  if (!entry || entry.status !== "active") {
+    return true;
+  }
+  if (!entry.worktree_path || !entry.branch) {
+    return true;
+  }
+  if (!fs.existsSync(entry.worktree_path) || !fs.statSync(entry.worktree_path).isDirectory()) {
+    return true;
+  }
+  if (!branchExists(repoRoot, entry.branch)) {
+    return true;
+  }
+  return false;
+}
+
+function pruneRuntimeState(runtime, repoRoot) {
+  let changed = false;
+  for (const [key, entry] of Object.entries(runtime.state.issues)) {
+    if (isRuntimeClaimStale(entry, repoRoot)) {
+      delete runtime.state.issues[key];
+      changed = true;
+    }
+  }
+  if (changed) {
+    saveRuntimeState(runtime);
+  }
+}
+
+function getRuntimeIssueState(runtime, issuePath, repoRoot) {
+  return runtime.state.issues[normalizeRuntimeIssueKey(issuePath, repoRoot)] || null;
 }
 
 function resolveRepoDocPath(anchorPath) {
@@ -628,16 +743,16 @@ function findLatestAgentBrief(text) {
   };
 }
 
-function outputIssue(record, scopeRoot) {
+function outputIssue(record, scopeRoot, runtimeEntry = null) {
   const meta = record.frontmatter;
   return {
     blocked_by: getBlockers(meta),
-    branch: meta.branch || null,
+    branch: runtimeEntry?.branch || meta.branch || null,
     category: meta.category || null,
     path: toDisplayPath(scopeRoot, record.filePath),
     status: meta.status || null,
     type: meta.type || null,
-    worktree_path: meta.worktree_path || null,
+    worktree_path: runtimeEntry?.worktree_path || meta.worktree_path || null,
   };
 }
 
@@ -650,14 +765,17 @@ function evaluateReadyIssues(index, options) {
 
   for (const issue of index.records) {
     const meta = issue.frontmatter;
+    const runtimeEntry = options.runtime
+      ? getRuntimeIssueState(options.runtime, issue.filePath, options.repoRoot)
+      : null;
     if (meta.type !== "Issue") {
       continue;
     }
 
-    if (meta.status === options.inProgressStatus || meta.worktree_path) {
+    if (runtimeEntry) {
       claimed.push({
-        ...outputIssue(issue, scopeRoot),
-        reason: meta.status === options.inProgressStatus ? "in_progress" : "has_worktree_path",
+        ...outputIssue(issue, scopeRoot, runtimeEntry),
+        reason: "runtime_claim",
       });
       continue;
     }
@@ -669,7 +787,7 @@ function evaluateReadyIssues(index, options) {
     if (meta.branch || meta.worktree_path) {
       claimed.push({
         ...outputIssue(issue, scopeRoot),
-        reason: "ready_status_with_claim",
+        reason: "legacy_frontmatter_claim",
       });
       continue;
     }
@@ -805,6 +923,9 @@ function cmdFindReady(args) {
   }
 
   const scope = options.prd ? loadPrdScope(options.prd) : loadLegacyScope(options.root);
+  const repoRoot = findRepoRoot(process.cwd());
+  const runtime = loadRuntimeState(repoRoot);
+  pruneRuntimeState(runtime, repoRoot);
   const statuses = resolveStatuses(options.prd || options.root || scope.issueRoot, {
     done: options.doneStatus,
     readyForAgent: options.readyStatus,
@@ -812,7 +933,9 @@ function cmdFindReady(args) {
   const result = evaluateReadyIssues(scope.index, {
     doneStatus: statuses.done,
     inProgressStatus: statuses.inProgress,
+    repoRoot,
     readyStatus: statuses.readyForAgent,
+    runtime,
   });
   const output = {
     blocked: result.blocked,
@@ -1031,12 +1154,14 @@ function parseCreateWorktreesArgs(args) {
   return options;
 }
 
-function issuePathsFromPrd(prdPath, limit, statuses) {
+function issuePathsFromPrd(prdPath, limit, statuses, runtime, repoRoot) {
   const scope = loadPrdScope(prdPath);
   const evaluated = evaluateReadyIssues(scope.index, {
     doneStatus: statuses.done,
     inProgressStatus: statuses.inProgress,
+    repoRoot,
     readyStatus: statuses.readyForAgent,
+    runtime,
   });
   const selected = limit ? evaluated.launchable.slice(0, limit) : evaluated.launchable;
   return {
@@ -1049,21 +1174,14 @@ function issuePathsFromPrd(prdPath, limit, statuses) {
   };
 }
 
-function markIssueInProgress(issuePath, entry, statuses) {
-  updateMarkdownFile(
-    issuePath,
-    (meta) => {
-      meta.status = statuses.inProgress;
-      meta.branch = entry.branch;
-      meta.worktree_path = entry.worktree_path;
-    },
-    [
-      "- Action: worktree created",
-      `- Branch: \`${entry.branch}\``,
-      `- Worktree: \`${entry.worktree_path}\``,
-      `- Base: \`${entry.base_ref}\``,
-    ],
-  );
+function claimIssueInRuntime(runtime, issuePath, repoRoot, entry, prdPath = null) {
+  upsertRuntimeIssueState(runtime, issuePath, repoRoot, {
+    branch: entry.branch,
+    prd_path: prdPath,
+    report_path: DEFAULT_REPORT_PATH,
+    status: "active",
+    worktree_path: entry.worktree_path,
+  });
 }
 
 function cmdCreateWorktrees(args) {
@@ -1079,12 +1197,14 @@ function cmdCreateWorktrees(args) {
   const cwd = process.cwd();
   const repoRoot = findRepoRoot(cwd);
   const statuses = resolveStatuses(repoRoot);
+  const runtime = loadRuntimeState(repoRoot);
+  pruneRuntimeState(runtime, repoRoot);
   const worktreeRoot = path.resolve(options.root || defaultWorktreeRoot(repoRoot));
   let issuePaths = options.issuePaths.slice();
   let prdDiscovery = null;
 
   if (options.prd) {
-    prdDiscovery = issuePathsFromPrd(options.prd, options.limit, statuses);
+    prdDiscovery = issuePathsFromPrd(options.prd, options.limit, statuses, runtime, repoRoot);
     if (issuePaths.length === 0) {
       issuePaths = prdDiscovery.issuePaths;
     }
@@ -1114,7 +1234,7 @@ function cmdCreateWorktrees(args) {
       if (!options.dryRun) {
         createWorktree(repoRoot, entry);
         if (options.markInProgress) {
-          markIssueInProgress(path.resolve(repoRoot, entry.issue_path), entry, statuses);
+          claimIssueInRuntime(runtime, path.resolve(repoRoot, entry.issue_path), repoRoot, entry, prdDiscovery?.prdPath);
         }
       }
 
@@ -1127,6 +1247,10 @@ function cmdCreateWorktrees(args) {
         issue_path: rawIssuePath,
       });
     }
+  }
+
+  if (!options.dryRun && options.markInProgress) {
+    saveRuntimeState(runtime);
   }
 
   emit(
@@ -1231,6 +1355,16 @@ function runVerifyCommand(command, worktreePath) {
   };
 }
 
+function loadActiveRuntimeIssueState(repoRoot, issuePath) {
+  const runtime = loadRuntimeState(repoRoot);
+  pruneRuntimeState(runtime, repoRoot);
+  const entry = getRuntimeIssueState(runtime, issuePath, repoRoot);
+  if (!entry) {
+    throw new ToolError("issue is missing runtime claim state");
+  }
+  return { entry, runtime };
+}
+
 function currentBranch(worktreePath) {
   return requireGitOk(runGit(["rev-parse", "--abbrev-ref", "HEAD"], worktreePath), "reading worktree branch");
 }
@@ -1248,6 +1382,8 @@ function releaseIssueForHuman(issuePath, evidenceLines, statuses) {
     issuePath,
     (meta) => {
       meta.status = statuses.readyForHuman;
+      delete meta.branch;
+      delete meta.worktree_path;
     },
     evidenceLines,
   );
@@ -1282,6 +1418,7 @@ function markIssueDone(issuePath, evidenceLines, statuses) {
     issuePath,
     (meta) => {
       meta.status = statuses.done;
+      delete meta.branch;
       delete meta.worktree_path;
     },
     evidenceLines,
@@ -1293,6 +1430,8 @@ function markIssueNeedsInfo(issuePath, evidenceLines, statuses) {
     issuePath,
     (meta) => {
       meta.status = statuses.needsInfo;
+      delete meta.branch;
+      delete meta.worktree_path;
     },
     evidenceLines,
   );
@@ -1406,10 +1545,8 @@ function cmdWriteReport(args) {
   const repoRoot = findRepoRoot(process.cwd());
   const issuePath = path.resolve(process.cwd(), options.issue);
   const issueRecord = loadMarkdownRecord(issuePath, repoRoot);
-  const worktreePath = issueRecord.frontmatter.worktree_path;
-  if (!worktreePath) {
-    throw new ToolError("issue is missing worktree_path front matter");
-  }
+  const { entry, runtime } = loadActiveRuntimeIssueState(repoRoot, issuePath);
+  const worktreePath = entry.worktree_path;
   if (!fs.existsSync(worktreePath) || !fs.statSync(worktreePath).isDirectory()) {
     throw new ToolError(`worktree not found: ${worktreePath}`);
   }
@@ -1434,6 +1571,11 @@ function cmdWriteReport(args) {
 
   ensureParentDir(reportPath);
   fs.writeFileSync(reportPath, reportText, "utf8");
+  upsertRuntimeIssueState(runtime, issuePath, repoRoot, {
+    ...entry,
+    report_path: reportPath,
+  });
+  saveRuntimeState(runtime);
   emit(
     {
       issue_path: issueDisplayPath,
@@ -1460,11 +1602,12 @@ function cmdMergeWorktree(args) {
   const statuses = resolveStatuses(repoRoot);
   const issuePath = path.resolve(process.cwd(), options.issue);
   const issueRecord = loadMarkdownRecord(issuePath, repoRoot);
-  const branch = issueRecord.frontmatter.branch;
-  const worktreePath = issueRecord.frontmatter.worktree_path;
+  const { entry, runtime } = loadActiveRuntimeIssueState(repoRoot, issuePath);
+  const branch = entry.branch;
+  const worktreePath = entry.worktree_path;
 
   if (!branch || !worktreePath) {
-    throw new ToolError("issue is missing branch or worktree_path front matter");
+    throw new ToolError("issue runtime claim is missing branch or worktree_path");
   }
   if (!fs.existsSync(worktreePath) || !fs.statSync(worktreePath).isDirectory()) {
     throw new ToolError(`worktree not found: ${worktreePath}`);
@@ -1492,6 +1635,8 @@ function cmdMergeWorktree(args) {
       "- Action: agent report failed",
       `- Report: \`${reportPath}\``,
     ], statuses);
+    clearRuntimeIssueState(runtime, issuePath, repoRoot);
+    saveRuntimeState(runtime);
     emit({ issue_path: issueDisplayPath, report_path: reportPath, status: "FAILED" }, options.pretty);
     return 0;
   }
@@ -1501,6 +1646,8 @@ function cmdMergeWorktree(args) {
       "- Action: agent report blocked",
       `- Report: \`${reportPath}\``,
     ], statuses);
+    clearRuntimeIssueState(runtime, issuePath, repoRoot);
+    saveRuntimeState(runtime);
     emit({ issue_path: issueDisplayPath, report_path: reportPath, status: "BLOCKED" }, options.pretty);
     return 0;
   }
@@ -1568,6 +1715,8 @@ function cmdMergeWorktree(args) {
         `- Report: \`${reportPath}\``,
       ], statuses);
     }
+    clearRuntimeIssueState(runtime, issuePath, repoRoot);
+    saveRuntimeState(runtime);
     emit(
       {
         issue_path: issueDisplayPath,
@@ -1588,6 +1737,8 @@ function cmdMergeWorktree(args) {
     commit.sha ? `- Commit: \`${commit.sha}\`` : null,
     options.verifyCommand ? `- Verification: \`${options.verifyCommand}\`` : null,
   ].filter(Boolean), statuses);
+  clearRuntimeIssueState(runtime, issuePath, repoRoot);
+  saveRuntimeState(runtime);
 
   const cleanupErrors = [];
   if (!options.keepWorktree) {

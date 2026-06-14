@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import childProcess from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -101,6 +102,47 @@ function uniqueTempPath(name) {
   return path.join(os.tmpdir(), `${name}-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
 }
 
+function runtimeStatePath(repoRoot) {
+  const repoId = crypto.createHash("sha1").update(path.resolve(repoRoot)).digest("hex").slice(0, 12);
+  return path.join(os.tmpdir(), `orchestrate-prd-${repoId}.json`);
+}
+
+function writeRuntimeClaim(repoRoot, issuePath, claim) {
+  const statePath = runtimeStatePath(repoRoot);
+  const relativeIssuePath = path.relative(repoRoot, issuePath).replace(/\\/g, "/");
+  const key = relativeIssuePath.toLowerCase();
+  writeFile(
+    statePath,
+    JSON.stringify(
+      {
+        active_workers: [],
+        issues: {
+          [key]: {
+            branch: claim.branch,
+            issue_path: relativeIssuePath,
+            last_update: claim.last_update || new Date().toISOString(),
+            prd_path: claim.prd_path || null,
+            report_path: claim.report_path || ".codex/orchestrate-prd/report.md",
+            status: claim.status || "active",
+            worktree_path: claim.worktree_path,
+            worker_id: claim.worker_id || null,
+          },
+        },
+        last_update: new Date().toISOString(),
+        prd_path: claim.prd_path || null,
+        repo_root: path.resolve(repoRoot),
+        state_version: 1,
+      },
+      null,
+      2,
+    ) + "\n",
+  );
+}
+
+function readRuntimeState(repoRoot) {
+  return JSON.parse(readFile(runtimeStatePath(repoRoot)));
+}
+
 function issueTemplate(status, extraFrontmatter = "", body = "") {
   return `---\n` +
     `type: Issue\n` +
@@ -115,16 +157,20 @@ test("write-report materializes valid captured output into the worktree", () => 
   const repoRoot = setupRepo("orchestrate-prd-write-report");
   const issuePath = path.join(repoRoot, ".scratch", "demo", "issues", "01-login-rate-limit.md");
   const worktreePath = uniqueTempPath("demo-worktree");
-  fs.mkdirSync(worktreePath, { recursive: true });
+  run("git", ["worktree", "add", "-b", "issue/login-rate-limit", worktreePath, "HEAD"], repoRoot);
 
   writeFile(
     issuePath,
     issueTemplate(
-      "in-progress",
-      `branch: issue/login-rate-limit\nworktree_path: ${JSON.stringify(worktreePath)}\n`,
+      "ready-for-agent",
+      "",
       "## Agent Brief\n\n## Acceptance Criteria\n- [ ] Add rate limiting\n",
     ),
   );
+  writeRuntimeClaim(repoRoot, issuePath, {
+    branch: "issue/login-rate-limit",
+    worktree_path: worktreePath,
+  });
   const outputPath = path.join(repoRoot, "captured-report.md");
   writeFile(
     outputPath,
@@ -158,11 +204,15 @@ test("merge-worktree marks FAIL reports as ready-for-human", () => {
   writeFile(
     issuePath,
     issueTemplate(
-      "in-progress",
-      `branch: issue/demo\nworktree_path: ${JSON.stringify(worktreePath)}\n`,
+      "ready-for-agent",
+      "",
       "## Agent Brief\n\n## Acceptance Criteria\n- [ ] Add rate limiting\n",
     ),
   );
+  writeRuntimeClaim(repoRoot, issuePath, {
+    branch: "issue/demo",
+    worktree_path: worktreePath,
+  });
   const reportPath = path.join(worktreePath, ".codex", "orchestrate-prd", "report.md");
   writeFile(
     reportPath,
@@ -184,6 +234,99 @@ test("merge-worktree marks FAIL reports as ready-for-human", () => {
   assert.equal(result.exitCode, 0);
   assert.equal(result.json.status, "FAILED");
   assert.match(readFile(issuePath), /status: ready-for-human/);
+  assert.equal(fs.existsSync(runtimeStatePath(repoRoot)), true);
+  assert.deepEqual(readRuntimeState(repoRoot).issues, {});
+});
+
+test("create-worktrees stores claims in runtime state without dirtying the issue file", () => {
+  const repoRoot = setupRepo("orchestrate-prd-runtime-claim");
+  const prdPath = path.join(repoRoot, ".scratch", "demo", "PRD.md");
+  const issuePath = path.join(repoRoot, ".scratch", "demo", "issues", "01-login-rate-limit.md");
+  const worktreeRoot = uniqueTempPath("orchestrate-prd-worktrees");
+
+  writeFile(
+    prdPath,
+    `---\n` +
+      `type: PRD\n` +
+      `status: ready-for-slicing\n` +
+      `category: enhancement\n` +
+      `blocked_by: []\n` +
+      `---\n\n` +
+      `## User Stories\n\n` +
+      `1. As an operator, I want login rate limiting, so that brute force attempts are reduced\n`,
+  );
+  writeFile(
+    issuePath,
+    issueTemplate(
+      "ready-for-agent",
+      "",
+      "## Agent Brief\n\n## Acceptance Criteria\n- [ ] Add rate limiting\n",
+    ),
+  );
+
+  const result = runMain(
+    [
+      "create-worktrees",
+      "--prd",
+      path.relative(repoRoot, prdPath),
+      "--base",
+      "HEAD",
+      "--root",
+      worktreeRoot,
+      "--mark-in-progress",
+      "--allow-dirty-base",
+      "--pretty",
+    ],
+    repoRoot,
+  );
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.json.created.length, 1);
+  assert.match(readFile(issuePath), /status: ready-for-agent/);
+  assert.doesNotMatch(readFile(issuePath), /worktree_path:/);
+  assert.doesNotMatch(readFile(issuePath), /branch:/);
+  const state = readRuntimeState(repoRoot);
+  const claim = state.issues[path.relative(repoRoot, issuePath).replace(/\\/g, "/").toLowerCase()];
+  assert.equal(claim.branch.startsWith("issue/"), true);
+  assert.equal(claim.worktree_path.includes(path.basename(worktreeRoot)), true);
+});
+
+test("find-ready ignores stale runtime claims and makes the issue launchable again", () => {
+  const repoRoot = setupRepo("orchestrate-prd-stale-claim");
+  const prdPath = path.join(repoRoot, ".scratch", "demo", "PRD.md");
+  const issuePath = path.join(repoRoot, ".scratch", "demo", "issues", "01-login-rate-limit.md");
+  const missingWorktreePath = uniqueTempPath("missing-worktree");
+
+  writeFile(
+    prdPath,
+    `---\n` +
+      `type: PRD\n` +
+      `status: ready-for-slicing\n` +
+      `category: enhancement\n` +
+      `blocked_by: []\n` +
+      `---\n\n` +
+      `## User Stories\n\n` +
+      `1. As an operator, I want login rate limiting, so that brute force attempts are reduced\n`,
+  );
+  writeFile(
+    issuePath,
+    issueTemplate(
+      "ready-for-agent",
+      "",
+      "## Agent Brief\n\n## Acceptance Criteria\n- [ ] Add rate limiting\n",
+    ),
+  );
+  writeRuntimeClaim(repoRoot, issuePath, {
+    branch: "issue/stale",
+    worktree_path: missingWorktreePath,
+  });
+
+  const result = runMain(["find-ready", "--prd", path.relative(repoRoot, prdPath), "--pretty"], repoRoot);
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.json.claimed.length, 0);
+  assert.equal(result.json.ready.length, 1);
+  assert.deepEqual(readRuntimeState(repoRoot).issues, {});
 });
 
 test("find-ready and review-prd respect repo-specific status mappings", () => {

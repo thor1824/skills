@@ -59,7 +59,7 @@ The state file should contain at least:
 - `status`
 - `last_update`
 
-Issue front matter remains the durable claim state. Do not duplicate long-lived tracker truth into the runtime file.
+Issue front matter remains the durable tracker state. Do not write ephemeral claim fields such as `in-progress`, `branch`, or `worktree_path` into the issue file just to coordinate orchestration. Keep those in runtime state and write the issue markdown only for durable planning data and terminal outcomes.
 
 ## Worker contract
 
@@ -89,6 +89,7 @@ Run a long-lived orchestration loop for one PRD:
 8. Repeat until no more progress is possible.
 
 Always pass the explicit base branch/ref when creating new worktrees. Do not rely on the script default `HEAD`.
+Treat `--mark-in-progress` as a runtime-only claim write. The main worktree should stay clean enough to merge issue branches back without stashing local tracker edits.
 
 ## Outcome handling
 

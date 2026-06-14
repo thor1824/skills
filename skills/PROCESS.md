@@ -34,6 +34,7 @@ This repo defines a local Markdown issue process for TSDA engineering skills.
 6. `skills/orchestrate-prd`
    - Drives one PRD to completion by repeatedly claiming `ready-for-agent` issues, creating worktrees, and delegating each issue to the `issue-implementer` subagent.
    - Consumes the same domain docs and issue contracts, using `CONTEXT.md`/`CONTEXT-MAP.md`, ADRs, and `docs/agents/*.md` before changing code.
+   - Keeps ephemeral claim state such as `in-progress`, branch names, and worktree paths in runtime state outside the tracked issue markdown so the main worktree stays mergeable.
    - Merges successful issue results, surfaces failures for human follow-up, and moves blocked issues to `needs-info` when information is missing.
    - Marks the PRD done only after all issues are terminal and PRD coverage review passes.
 
