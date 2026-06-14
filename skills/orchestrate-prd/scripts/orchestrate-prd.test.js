@@ -1,11 +1,15 @@
-const test = require("node:test");
-const assert = require("node:assert/strict");
-const childProcess = require("node:child_process");
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
+import assert from "node:assert/strict";
+import childProcess from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const { main } = require("./orchestrate-prd");
+import { main } from "./orchestrate-prd.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function run(command, args, cwd) {
   const result = childProcess.spawnSync(command, args, {

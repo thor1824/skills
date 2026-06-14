@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 
-const childProcess = require("child_process");
-const fs = require("fs");
-const path = require("path");
+import childProcess from "node:child_process";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
 
 const DEFAULT_HASH_LEN = 6;
 const STATUS_PROPERTY_TO_CANONICAL = {
@@ -901,7 +905,7 @@ function slugPart(value) {
 }
 
 function issueSlug(issuePath, repoRelative) {
-  const digest = require("crypto")
+  const digest = crypto
     .createHash("sha1")
     .update(repoRelative)
     .digest("hex")
@@ -2057,7 +2061,7 @@ function dispatch(argv) {
   throw new UsageError(`unknown command: ${command}\n${usage()}`);
 }
 
-function main(argv = process.argv.slice(2)) {
+export function main(argv = process.argv.slice(2)) {
   try {
     return dispatch(argv);
   } catch (error) {
@@ -2073,10 +2077,6 @@ function main(argv = process.argv.slice(2)) {
   }
 }
 
-if (require.main === module) {
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
   process.exitCode = main();
 }
-
-module.exports = {
-  main,
-};

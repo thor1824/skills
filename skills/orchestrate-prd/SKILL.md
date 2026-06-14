@@ -68,8 +68,6 @@ For each claimed issue:
 3. Pass only the issue reference and normal repo instructions. Do not ask the subagent to manage status transitions, comments, commits, or cleanup.
 4. Capture the subagent’s final output exactly.
 
-The subagent must follow [subagents/issue-implementer.md](../../subagents/issue-implementer.md).
-
 If subagent launch capability is unavailable in the current environment, stop and report `BLOCKED` rather than simulating completion.
 
 ## Loop
