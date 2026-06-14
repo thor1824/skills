@@ -16,6 +16,7 @@ const STATUS_PROPERTY_TO_CANONICAL = {
   needsTriage: "needs-triage",
   readyForAgent: "ready-for-agent",
   readyForHuman: "ready-for-human",
+  readyForSlicing: "ready-for-slicing",
   wontfix: "wontfix",
 };
 const REQUIRED_STATUS_PROPERTIES = [
@@ -217,6 +218,14 @@ function loadMappedStatuses(anchorPath) {
   }
 
   const rawMapping = parseStatusMappingTable(fs.readFileSync(mappingPath, "utf8"));
+  if (
+    !rawMapping[STATUS_PROPERTY_TO_CANONICAL.readyForSlicing] &&
+    rawMapping[STATUS_PROPERTY_TO_CANONICAL.readyForHuman]
+  ) {
+    rawMapping[STATUS_PROPERTY_TO_CANONICAL.readyForSlicing] =
+      rawMapping[STATUS_PROPERTY_TO_CANONICAL.readyForHuman];
+  }
+
   const missing = REQUIRED_STATUS_PROPERTIES.filter(
     (property) => !rawMapping[STATUS_PROPERTY_TO_CANONICAL[property]],
   );

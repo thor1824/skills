@@ -2,9 +2,9 @@
 
 ## Scope
 
-The system under test is the end-to-end skill chain described in [PROCESS.md](../skills/PROCESS.md): `/prepare-repo` -> optional `/grill-with-docs` -> `/to-prd` -> `/to-issues` -> `/triage` -> implementation handoff.
+The system under test is the end-to-end skill chain described in [PROCESS.md](skills/PROCESS.md): `/prepare-repo` -> optional `/grill-with-docs` -> `/to-prd` -> `/to-issues` -> `/triage` -> implementation handoff.
 
-The key behavior is not "did a skill run", but "did each producer emit the exact artifacts and fields the next consumer needs" per the handoff rules in [PROCESS.md](../skills/PROCESS.md).
+The key behavior is not "did a skill run", but "did each producer emit the exact artifacts and fields the next consumer needs" per the handoff rules in [PROCESS.md](skills/PROCESS.md).
 
 This plan combines:
 
@@ -44,17 +44,17 @@ Recommended fixture repos:
 | prepare repo idempotence | prepared repo | rerun on existing setup | preserves valid existing contracts, no duplicate sections | filesystem writes only | important for repeated use |
 | prd generation | prepared repo + feature request | minimal valid context | creates `.scratch/<slug>/PRD.md` with `type: PRD`, `category: enhancement`, `blocked_by: []`, mapped `needs-triage` status | `.scratch` write | direct handoff to triage |
 | prd generation missing prep | blank repo + feature request | contracts absent | either blocks with explicit need for `/prepare-repo` or produces a clearly actionable failure | no partial invalid PRD | must not invent contracts |
-| issue slicing approved prd | `ready-for-human` PRD | approved boundary | creates issue files with `type: Issue`, `category`, `blocked_by`, mapped `needs-triage` status | `.scratch` writes | direct handoff to triage |
+| issue slicing approved prd | `ready-for-slicing` PRD | approved boundary | creates issue files with `type: Issue`, `category`, `blocked_by`, mapped `needs-triage` status | `.scratch` writes | direct handoff to triage |
 | issue slicing unapproved prd | `needs-triage` PRD | not approved boundary | warns that triage approval is required, does not silently publish slices | no invalid issue creation | critical governance check |
-| triage PRD happy path | PRD in `needs-triage` | `type: PRD` | transitions only to `needs-info`, `ready-for-human`, or `wontfix` | note write | PRD must never go to `ready-for-agent` |
+| triage PRD happy path | PRD in `needs-triage` | `type: PRD` | transitions only to `needs-info`, `ready-for-slicing`, or `wontfix` | note write | PRD must never go to `ready-for-agent` |
 | triage issue happy path | Issue in `needs-triage` | `type: Issue` | transitions to valid delivery states only | note write, agent brief write if needed | normal delivery flow |
 | triage invalid type/state combo | PRD requested to `ready-for-agent` | semantic mismatch | flags mismatch and asks/blocks instead of applying invalid state | no invalid front matter | explicit rule in triage skill |
 | ready-for-agent contract | Issue moved to `ready-for-agent` | latest brief absent boundary | writes/updates latest `## Agent Brief` with acceptance criteria before leaving state | issue note write | must preserve AFK contract |
-| ready-for-human semantics | PRD vs Issue | same status name, different meaning | PRD note says approved for `/to-issues`; Issue note explains why human-only | note write | guards semantic drift |
+| ready-for-slicing semantics | PRD vs Issue | distinct state meanings | PRD note says approved for `/to-issues`; Issue `ready-for-human` note explains why human-only | note write | guards semantic drift |
 | wontfix enhancement path | enhancement issue/PRD rejected | rejection boundary | sets status `wontfix` and writes `.out-of-scope` record | `.out-of-scope` write | must exist for memory |
 | blocked dependencies | issue with blockers | `blocked_by` non-empty | preserves blocker list through triage and handoff | markdown update | no dropping dependencies |
 | grill durable output | fuzzy terminology/decision | ambiguity boundary | established facts survive into `CONTEXT.md`, ADRs, PRD text, issue notes, or agent brief | docs writes | tests nothing gets lost |
-| end-to-end golden path | feature request in blank repo | full chain | `/prepare-repo` -> PRD -> triage `ready-for-human` -> issues -> triage `ready-for-agent`/human with correct artifacts | all expected writes | main regression test |
+| end-to-end golden path | feature request in blank repo | full chain | `/prepare-repo` -> PRD -> triage `ready-for-slicing` -> issues -> triage `ready-for-agent`/human with correct artifacts | all expected writes | main regression test |
 | end-to-end rejection path | weak enhancement request | full chain negative | PRD/issue reaches `wontfix` with rationale and out-of-scope memory | `.out-of-scope` write | main negative regression test |
 
 ## End-to-End Scenarios
@@ -92,7 +92,7 @@ Assert status changes and `.out-of-scope/` receives a record.
 ## Acceptance Criteria For The Test Plan
 
 - Every skill output is verified only through filesystem artifacts and markdown content
-- Every adjacent handoff in [PROCESS.md](../skills/PROCESS.md) has at least one positive and one negative test
+- Every adjacent handoff in [PROCESS.md](skills/PROCESS.md) has at least one positive and one negative test
 - Status semantics are tested separately for `type: PRD` and `type: Issue`
 - At least 2 full-chain tests exist: one golden path, one rejection/failure path
 - No test depends on internal prompt wording

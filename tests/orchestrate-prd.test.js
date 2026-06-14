@@ -1,11 +1,15 @@
-const test = require("node:test");
-const assert = require("node:assert/strict");
-const childProcess = require("node:child_process");
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
+import assert from "node:assert/strict";
+import childProcess from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const { main } = require("./orchestrate-prd.js");
+import { main } from "../skills/orchestrate-prd/scripts/orchestrate-prd.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function run(command, args, cwd) {
   const result = childProcess.spawnSync(command, args, {
@@ -30,6 +34,7 @@ function writeTriageLabels(repoRoot, statuses = {}) {
   const mapping = {
     "needs-triage": statuses.needsTriage || "needs-triage",
     "needs-info": statuses.needsInfo || "needs-info",
+    "ready-for-slicing": statuses.readyForSlicing || "ready-for-slicing",
     "ready-for-agent": statuses.readyForAgent || "ready-for-agent",
     "ready-for-human": statuses.readyForHuman || "ready-for-human",
     "in-progress": statuses.inProgress || "in-progress",
@@ -187,6 +192,7 @@ test("find-ready and review-prd respect repo-specific status mappings", () => {
     done: "closed",
     inProgress: "active",
     needsInfo: "waiting-on-reporter",
+    readyForSlicing: "approved-for-slicing",
     readyForAgent: "queued-for-agent",
     readyForHuman: "waiting-on-human",
     wontfix: "declined",
@@ -201,7 +207,7 @@ test("find-ready and review-prd respect repo-specific status mappings", () => {
     prdPath,
     `---\n` +
       `type: PRD\n` +
-      `status: waiting-on-human\n` +
+      `status: approved-for-slicing\n` +
       `category: enhancement\n` +
       `blocked_by: []\n` +
       `---\n\n` +
@@ -259,7 +265,7 @@ test("review-prd reports uncovered user stories", () => {
     prdPath,
     `---\n` +
       `type: PRD\n` +
-      `status: ready-for-human\n` +
+      `status: ready-for-slicing\n` +
       `category: enhancement\n` +
       `blocked_by: []\n` +
       `---\n\n` +
@@ -295,7 +301,7 @@ test("review-prd prefers explicit story references over legacy inference", () =>
     prdPath,
     `---\n` +
       `type: PRD\n` +
-      `status: ready-for-human\n` +
+      `status: ready-for-slicing\n` +
       `category: enhancement\n` +
       `blocked_by: []\n` +
       `---\n\n` +
@@ -330,7 +336,7 @@ test("mark-done marks the PRD done only after coverage review passes", () => {
     prdPath,
     `---\n` +
       `type: PRD\n` +
-      `status: ready-for-human\n` +
+      `status: ready-for-slicing\n` +
       `category: enhancement\n` +
       `blocked_by: []\n` +
       `---\n\n` +
@@ -364,7 +370,7 @@ test("find-ready fails clearly when triage status mapping is missing", () => {
     prdPath,
     `---\n` +
       `type: PRD\n` +
-      `status: ready-for-human\n` +
+      `status: ready-for-slicing\n` +
       `category: enhancement\n` +
       `blocked_by: []\n` +
       `---\n`,
@@ -376,8 +382,53 @@ test("find-ready fails clearly when triage status mapping is missing", () => {
   assert.match(result.json.error, /Run \/prepare-repo/i);
 });
 
+test("find-ready falls back to ready-for-human when ready-for-slicing mapping is absent", () => {
+  const repoRoot = setupRepo("orchestrate-prd-legacy-slicing-state");
+  writeFile(
+    path.join(repoRoot, "docs", "agents", "triage-labels.md"),
+    `# Issue Statuses\n\n` +
+      `| Canonical state | \`status\` value in our tracker | Meaning |\n` +
+      `| --- | --- | --- |\n` +
+      `| \`needs-triage\` | \`needs-triage\` | test |\n` +
+      `| \`needs-info\` | \`needs-info\` | test |\n` +
+      `| \`ready-for-agent\` | \`ready-for-agent\` | test |\n` +
+      `| \`ready-for-human\` | \`waiting-on-human\` | test |\n` +
+      `| \`in-progress\` | \`in-progress\` | test |\n` +
+      `| \`done\` | \`done\` | test |\n` +
+      `| \`wontfix\` | \`wontfix\` | test |\n`,
+  );
+
+  const prdPath = path.join(repoRoot, ".scratch", "demo", "PRD.md");
+  const issueReadyPath = path.join(repoRoot, ".scratch", "demo", "issues", "01-login-rate-limit.md");
+
+  writeFile(
+    prdPath,
+    `---\n` +
+      `type: PRD\n` +
+      `status: waiting-on-human\n` +
+      `category: enhancement\n` +
+      `blocked_by: []\n` +
+      `---\n\n` +
+      `## User Stories\n\n` +
+      `1. As an operator, I want login rate limiting, so that brute force attempts are reduced\n`,
+  );
+  writeFile(
+    issueReadyPath,
+    issueTemplate(
+      "ready-for-agent",
+      "",
+      "## Agent Brief\n\n## Acceptance Criteria\n- [ ] Add rate limiting\n",
+    ),
+  );
+
+  const ready = runMain(["find-ready", "--prd", path.relative(repoRoot, prdPath), "--pretty"], repoRoot);
+
+  assert.equal(ready.exitCode, 0);
+  assert.equal(ready.json.ready.length, 1);
+});
+
 test("skill docs reference prepare-repo instead of the old setup skill", () => {
-  const repoRoot = path.resolve(__dirname, "..", "..", "..");
+  const repoRoot = path.resolve(__dirname, "..");
   const processDoc = readFile(path.join(repoRoot, "skills", "PROCESS.md"));
   const triageDoc = readFile(path.join(repoRoot, "skills", "triage", "SKILL.md"));
   const toPrdDoc = readFile(path.join(repoRoot, "skills", "to-prd", "SKILL.md"));

@@ -24,10 +24,10 @@ This repo defines a local Markdown issue process for TSDA engineering skills.
 
 5. `/triage`
    - Reads local Markdown PRDs and issues, assigns or verifies front matter `type`, `category`, `status`, and `blocked_by`.
-   - For `type: PRD`, approves PRDs for human issue slicing via `/to-issues` by moving them to canonical `ready-for-human`, or moves them to `needs-info`/`wontfix`.
+   - For `type: PRD`, approves PRDs for issue slicing via `/to-issues` by moving them to canonical `ready-for-slicing`, or moves them to `needs-info`/`wontfix`.
    - For `type: Issue`, canonical `ready-for-human` means the issue needs human implementation rather than AFK agent work.
    - Runs `/grill-with-docs` when an issue needs more domain, scope, or acceptance detail.
-   - Moves items through `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `in-progress`, `done`, and `wontfix`.
+   - Moves items through `needs-triage`, `needs-info`, `ready-for-slicing`, `ready-for-agent`, `ready-for-human`, `in-progress`, `done`, and `wontfix`.
    - Writes agent briefs when an issue becomes `ready-for-agent`.
    - Writes `.out-of-scope/` records when an enhancement is rejected as `wontfix`.
 
@@ -52,7 +52,8 @@ Each producer skill must emit the fields the next consumer needs. In practice:
 - Anything triage should see must include front matter `type` and the `status` value mapped from canonical `needs-triage`.
 - Anything already classifiable should include exactly one front matter `category` value.
 - Anything with dependencies should include front matter `blocked_by`; use `blocked_by: []` for unblocked items.
-- `ready-for-human` means "human action required"; PRDs use it for `/to-issues` approval, while implementation issues use it for human delivery.
+- `ready-for-slicing` means the PRD is approved for `/to-issues`.
+- `ready-for-human` means "human action required" for implementation issues only.
 - `ready-for-agent` means the mapped tracker `status` for canonical `ready-for-agent` plus a latest `## Agent Brief` with concrete acceptance criteria.
 - Anything resolved by `/grill-with-docs` should survive as `CONTEXT.md` terms, ADRs, issue comments, PRD text, or agent brief material.
 - Anything delegated to an AFK agent should include an agent brief with current behavior, desired behavior, key interfaces, acceptance criteria, and out-of-scope notes.

@@ -11,6 +11,7 @@ This skill assumes:
 - The issue tracker is the local Markdown tracker under `.scratch/`
 - The PRD already exists and has implementation issues
 - Issues are triaged before orchestration
+- The PRD may be in canonical `ready-for-slicing`; that state only authorizes `/to-issues` and does not block or complete implementation orchestration
 - AFK-eligible issues are identified by `status: ready-for-agent` plus a latest `## Agent Brief` with concrete acceptance criteria
 
 If the repo-specific tracker docs are missing, run `/prepare-repo` first.
@@ -76,6 +77,7 @@ Run a long-lived orchestration loop for one PRD:
 
 1. Read the PRD and current issue set.
 2. Find ready issues.
+   If there are no issue files yet, surface that the PRD still needs `/to-issues` or equivalent slicing work rather than treating the PRD status as an implementation stop condition.
 3. Launch up to the concurrency limit.
 4. Wait for any active worker to finish.
 5. On worker completion:

@@ -9,7 +9,7 @@ disable-model-invocation: true
 Scaffold the per-repo configuration that the engineering skills assume:
 
 - **Issue tracker** — where issues live local Markdown
-- **Triage statuses** — the front matter strings used for the seven canonical issue states
+- **Triage statuses** — the front matter strings used for the eight canonical issue states
 - **Domain docs** — where `CONTEXT.md` and ADRs live, how `/grill-with-docs` produces them, and how consumer skills read them
 
 This is a prompt-driven skill, not a deterministic script. Explore, present what you found, confirm with the user, then write.
@@ -52,12 +52,13 @@ Confirm the local markdown convention:
 
 > Explainer: When a skill processes an issue, it writes a `status` value into the markdown issue file front matter. In this repo, Section B defines the allowed issue-state strings for that field, covering both triage and delivery progress. If your repo already uses different status strings (e.g. `triage-needed` instead of `needs-triage`), map them here so the skill writes the right values instead of inventing new ones.
 
-The seven canonical issue states:
+The eight canonical issue states:
 
 - `needs-triage` — maintainer needs to evaluate
 - `needs-info` — waiting on reporter
+- `ready-for-slicing` — PRD approved for `/to-issues`
 - `ready-for-agent` — fully specified, AFK-ready (an agent can pick it up with no human context)
-- `ready-for-human` — requires human action; for PRDs, approved for `/to-issues`; for issues, needs human implementation
+- `ready-for-human` — requires human action for implementation issues
 - `in-progress` — implementation is underway
 - `done` — implementation is complete
 - `wontfix` — will not be actioned
