@@ -820,7 +820,6 @@ function Invoke-Run {
         worktreePath = $artifacts.WorktreePath
         reportPath = $artifacts.ReportAbsolutePath
         reportRelativePath = $artifacts.ReportRelativePath
-        promptTemplatePath = (Join-Path -Path $PSScriptRoot -ChildPath 'WORKER-PROMPT.md')
         preflight = @{
             eligibleCount = $preflight.Eligible.Count
             blockedCount = $preflight.BlockedReady.Count

@@ -1,6 +1,6 @@
 ---
 name: issue-manager
-description: Orchestrate ready local-markdown issues through deterministic claim, worker worktree preparation, worker completion, and serialized merge using a PowerShell manager plus a Codex worker subagent. Use when the user wants to run the AFK implementation loop, inspect manager status, or inspect leftover manager artifacts.
+description: Orchestrate ready local-markdown issues through deterministic claim, worker worktree preparation, worker completion, and serialized merge using a PowerShell manager plus the dedicated `issue_manager_worker` agent. Use when the user wants to run the AFK implementation loop, inspect manager status, or inspect leftover manager artifacts.
 disable-model-invocation: true
 ---
 
@@ -72,7 +72,7 @@ For `status` or `cleanup`:
 
 ## Run flow
 
-For `run`, act as the thin wrapper around `manager.ps1` and the worker subagent.
+For `run`, act as the thin wrapper around `manager.ps1` and the `issue_manager_worker` agent.
 
 ### 1. Claim or stop
 
@@ -97,36 +97,32 @@ When `claimed` is returned, report a concise preflight summary before launching 
 - existing `ready-for-human` issue count
 - claimed issue path
 
-### 2. Render the worker prompt
+### 2. Spawn the worker
 
-Read the prompt template at the exact `promptTemplatePath` returned by `manager.ps1`.
-
-Render it by replacing these placeholders:
-
-- `{{ISSUE_PATH}}`
-- `{{WORKTREE_PATH}}`
-- `{{BRANCH_NAME}}`
-- `{{REPORT_PATH}}`
-
-Do not add extra conversational context. The worker should start with minimal fresh context and work from the issue plus the fixed contract.
-
-### 3. Spawn the worker
-
-Spawn a `default` subagent:
+Spawn the named agent `issue_manager_worker`:
 
 - `fork_context: false`
 - one initial prompt only
 - no follow-up messages
 
-The worker prompt is the fully rendered `WORKER-PROMPT.md` template.
+Use a minimal prompt that passes only the four assigned runtime values:
 
-### 4. Wait policy
+```text
+Assigned issue path: <issue path>
+Assigned worktree path: <worktree path>
+Assigned branch name: <branch name>
+Assigned report file path: <report file path>
+```
+
+Do not add extra conversational context.
+
+### 3. Wait policy
 
 - Wait for the worker to finish for up to 30 minutes.
 - If the worker times out, close the subagent.
 - If the worker fails, is interrupted, or times out, still continue to Step 5 exactly once. The repo state remains the authoritative completion check.
 
-### 5. Complete the claimed issue
+### 4. Complete the claimed issue
 
 Always run exactly one completion pass after the worker ends:
 

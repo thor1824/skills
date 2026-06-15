@@ -168,6 +168,7 @@ function Test-SingleIssueHappyPath {
     }
     Assert-Equal $claimed.Json.status 'claimed' 'single ready issue should be claimed.'
     Assert-Equal $claimed.Json.issuePath '.scratch/feature-a/issues/01-update-app.md' 'claimed issue path should be stable.'
+    Assert-True (-not ($claimed.Json.PSObject.Properties.Name -contains 'promptTemplatePath')) 'claimed payload should not expose a prompt template path.'
 
     Complete-WorkerStub -RepoPath $repo -Claimed $claimed.Json -NewText 'worker change'
 
