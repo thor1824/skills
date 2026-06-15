@@ -25,10 +25,11 @@ Look at the current repo to understand its starting state. Read whatever exists;
 - `docs/adr/` and any `src/*/docs/adr/` directories
 - `docs/agents/` - does this skill's prior output already exist?
 - `.scratch/` - sign that a local-markdown issue tracker convention is already in use
+- `.gitignore` - whether the repo already ignores `.worktrees/` and `.agents/issue-manager/`
 
 ### 2. Present findings and ask
 
-Summarize what's present and what's missing. Then walk the user through the three decisions **one at a time** - present a section, get the user's answer, then move to the next. Don't dump all three at once.
+Summarize what's present and what's missing. Then walk the user through the four decisions **one at a time** - present a section, get the user's answer, then move to the next. Don't dump all four at once.
 
 Assume the user does not know what these terms mean. Each section starts with a short explainer (what it is, why these skills need it, what changes if they pick differently). Then show the choices and the default.
 
@@ -74,12 +75,24 @@ Confirm the layout:
 - **Single-context** - one `CONTEXT.md` + `docs/adr/` at the repo root. Most repos are this.
 - **Multi-context** - `CONTEXT-MAP.md` at the root pointing to per-context `CONTEXT.md` files (typically a monorepo).
 
+**Section D - Issue manager prerequisites.**
+
+> Explainer: `/issue-manager` creates repo-local git worktrees and worker report files while it orchestrates AFK issue implementation. Those operational artifacts must stay out of version control so the manager can create them without making the repo appear dirty.
+
+Confirm the repo-local ignore rules:
+
+- `.worktrees/` - the manager-owned directory for dedicated worker worktrees
+- `.agents/issue-manager/` - the manager-owned directory for worker reports and related runtime artifacts
+
+Default: both paths should be added to `.gitignore`.
+
 ### 3. Confirm and edit
 
 Show the user a draft of:
 
 - The `## Agent skills` block to add to `AGENTS.md`
 - The contents of `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, `docs/agents/domain.md`
+- The `.gitignore` entries to add for `.worktrees/` and `.agents/issue-manager/`
 
 Let them edit before writing.
 
@@ -116,6 +129,15 @@ Then write the three docs files using the seed templates in this skill folder as
 - [triage-labels.md](./triage-labels.md) - status mapping
 - [domain.md](./domain.md) - domain doc consumer rules + layout
 
+Then update `.gitignore` so it contains:
+
+```gitignore
+.worktrees/
+.agents/issue-manager/
+```
+
+Add the entries if they are missing; do not duplicate them if they already exist.
+
 ### 5. Done
 
-Tell the user the setup is complete, that `/grill-with-docs` will produce domain docs lazily, and which engineering skills will now read from these files. Mention they can edit `docs/agents/*.md` directly later - re-running this skill is only necessary if they want to change the local markdown conventions or restart from scratch.
+Tell the user the setup is complete, that `/grill-with-docs` will produce domain docs lazily, and which engineering skills will now read from these files. Mention they can edit `docs/agents/*.md` directly later - re-running this skill is only necessary if they want to change the local markdown conventions, the issue-manager ignore rules, or restart from scratch.

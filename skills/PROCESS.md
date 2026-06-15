@@ -31,7 +31,13 @@ This repo defines a local Markdown issue process for TSDA engineering skills.
    - Writes agent briefs when an issue becomes `ready-for-agent`.
    - Writes `.out-of-scope/` records when an enhancement is rejected as `wontfix`.
 
-6. `???`
+6. `/issue-manager`
+   - Requires `/prepare-repo` to have established the local tracker contract in `docs/agents/` and the ignore rules for `.worktrees/` and `.agents/issue-manager/`.
+   - Scans `.scratch/**/issues/*.md` for implementation issues that are `ready-for-agent`, unblocked, and structurally valid for AFK execution.
+   - Claims one issue at a time by moving it to `in-progress` on the current clean integration branch, committing that claim, then preparing a dedicated worker branch and worktree.
+   - Delegates implementation to a worker agent that reads the issue's `## Agent Brief`, works only inside the assigned worktree, updates the issue to `done`, and writes a completion report under `.agents/issue-manager/`.
+   - Merges one completed worker branch at a time back into the integration branch and rescans the tracker after each successful merge.
+   - Stops on the first worker, validation, or merge failure and leaves the worker branch/worktree available for manual review.
 
 ## Shared contracts
 
@@ -39,6 +45,7 @@ This repo defines a local Markdown issue process for TSDA engineering skills.
 - Status mapping: `docs/agents/triage-labels.md`
 - Domain-doc rules: `docs/agents/domain.md`
 - Local issue root: `.scratch/`
+- Issue-manager runtime state: `.worktrees/` and `.agents/issue-manager/`
 - Rejected enhancement memory: `.out-of-scope/`
 
 ## Handoff rule
@@ -53,3 +60,4 @@ Each producer skill must emit the fields the next consumer needs. In practice:
 - `ready-for-agent` means the mapped tracker `status` for canonical `ready-for-agent` plus a latest `## Agent Brief` with concrete acceptance criteria.
 - Anything resolved by `/grill-with-docs` should survive as `CONTEXT.md` terms, ADRs, issue comments, PRD text, or agent brief material.
 - Anything delegated to an AFK agent should include an agent brief with current behavior, desired behavior, key interfaces, acceptance criteria, and out-of-scope notes.
+- Anything delegated through `/issue-manager` should leave a dedicated worker worktree under `.worktrees/`, a report file under `.agents/issue-manager/`, and a committed issue-state transition trail (`in-progress` then `done`) in git history.

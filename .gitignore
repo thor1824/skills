@@ -7,3 +7,5 @@
 
 !.idea/codeStyles
 !.idea/runConfigurations
+.worktrees/
+.agents/issue-manager/
