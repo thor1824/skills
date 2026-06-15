@@ -1,13 +1,13 @@
 ---
 name: to-prd
-description: Turn the current conversation context into a PRD and publish it to the project issue tracker. Use when user wants to create a PRD from the current context.
+description: Turn the current conversation context into a PRD draft, get maintainer approval, and then publish it to the project issue tracker. Use when user wants to create a PRD from the current context.
 ---
 
 # To PRD
 
-This skill takes the current conversation context and codebase understanding and produces a PRD. Do NOT interview the user for new requirements — synthesize what you already know. A short confirmation checkpoint for module and test scope is allowed.
+This skill takes the current conversation context and codebase understanding and produces a PRD. Do NOT interview the user for new requirements - synthesize what you already know. A short confirmation checkpoint for module and test scope is allowed.
 
-The issue tracker and triage status vocabulary should have been provided to you — run `/prepare-repo` if not. Before writing any `status` value in issue front matter, read `docs/agents/triage-labels.md` and use the tracker value mapped from the canonical state name.
+The issue tracker contract should have been provided to you - run `/prepare-repo` if not.
 
 ## Process
 
@@ -19,15 +19,16 @@ A deep module (as opposed to a shallow module) is one which encapsulates a lot o
 
 Check with the user that these modules match their expectations. Check with the user which modules they want tests written for.
 
-3. Write the PRD using the template below, then publish it to the project issue tracker. Include YAML front matter with `type: PRD`, `category: enhancement`, `blocked_by: []`, and the tracker-specific `status` value mapped from canonical `needs-triage` so it enters the normal triage flow.
+3. Write the PRD using the template below, then present the full draft in chat and wait for explicit approval before writing any file.
+
+4. If the maintainer requests changes, revise the draft in chat and ask again. Only publish the PRD to the project issue tracker after explicit approval.
+
+5. When you publish the approved PRD, use the minimal YAML front matter shown below. Do not add `status`, `category`, or `blocked_by` when creating a new PRD. A PRD may receive `status: done` or `status: wontfix` later if the maintainer explicitly closes it.
 
 <prd-template>
 
 ---
 type: PRD
-status: <tracker value for canonical needs-triage>
-category: enhancement
-blocked_by: []
 ---
 
 ## Problem Statement

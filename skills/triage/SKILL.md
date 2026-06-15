@@ -1,11 +1,11 @@
 ---
 name: triage
-description: Triage PRDs and issues through a state machine driven by front matter item type, issue category, blocker refs, and status values. Use when user wants to create an issue, triage issues, review incoming bugs or feature requests, prepare issues for an AFK agent, or manage issue workflow.
+description: Triage implementation issues through a state machine driven by front matter item type, issue category, blocker refs, and status values, and optionally close PRDs. Use when user wants to create an issue, triage issues, review incoming bugs or feature requests, prepare issues for an AFK agent, or manage issue workflow.
 ---
 
 # Triage
 
-Move PRDs and issues on the project's issue tracker through a small state machine of front matter item types, issue category, blocker refs, and status values.
+Move implementation issues on the project's issue tracker through a small state machine of front matter item type, issue category, blocker refs, and status values. PRDs do not participate in the normal triage workflow; they may only be explicitly closed.
 
 Every comment or note added during triage **must** start with this disclaimer:
 
@@ -29,27 +29,26 @@ Two **category** values:
 
 Two **type** values:
 
-- `PRD` - product requirements document waiting for triage or issue slicing
+- `PRD` - product requirements document that may later be explicitly closed
 - `Issue` - implementation issue that can move toward human or agent delivery
 
-Eight **state** values:
+Seven **issue state** values:
 
 - `needs-triage` - maintainer needs to evaluate
 - `needs-info` - waiting on reporter for more information
-- `ready-for-slicing` - PRD is approved for `/to-issues`
 - `ready-for-agent` - fully specified, ready for an AFK agent
 - `ready-for-human` - requires human action for implementation issues
 - `in-progress` - implementation is underway
 - `done` - implementation is complete
 - `wontfix` - will not be actioned
 
-Every triaged item should start with YAML front matter carrying exactly one `type` value, one `category` value, one `status` value, and one `blocked_by` list. If state values conflict, flag it and ask the maintainer before doing anything else.
+Implementation issues should start with YAML front matter carrying exactly one `type` value, one `category` value, one `status` value, and one `blocked_by` list. PRDs are different: they should normally carry only `type: PRD`, and may later gain `status: done` or `status: wontfix` when the maintainer explicitly closes them. If state values conflict, flag it and ask the maintainer before doing anything else.
 
 These are canonical state names - the actual front matter `status` strings used in the issue tracker may differ. The mapping should have been provided to you in `docs/agents/triage-labels.md`.
 
 When using the local Markdown tracker, "post a comment" or "add a note" means append under the issue file's `## Comments` section. Keep the required triage disclaimer at the start of each appended note.
 
-State transitions use canonical names in this skill, but write the mapped tracker values from `docs/agents/triage-labels.md` to the front matter `status` field. A new PRD or issue normally starts at `needs-triage`. `type: PRD` can move to `needs-info`, `ready-for-slicing`, or `wontfix`; `ready-for-slicing` means ready for `/to-issues`. `type: Issue` can move to `needs-info`, `ready-for-agent`, `ready-for-human`, `in-progress`, `done`, or `wontfix` as appropriate. `needs-info` returns to `needs-triage` once the reporter replies. `ready-for-agent` means the mapped tracker `status` for canonical `ready-for-agent` plus a latest `## Agent Brief` with concrete acceptance criteria. `ready-for-agent` or `ready-for-human` issues may move to `in-progress`, then `done`. The maintainer can override at any time - flag transitions that look unusual and ask before proceeding.
+State transitions use canonical names in this skill, but write the mapped tracker values from `docs/agents/triage-labels.md` to the front matter `status` field for implementation issues. A new Issue normally starts at `needs-triage`. `type: Issue` can move to `needs-info`, `ready-for-agent`, `ready-for-human`, `in-progress`, `done`, or `wontfix` as appropriate. `needs-info` returns to `needs-triage` once the reporter replies. `ready-for-agent` means the mapped tracker `status` for canonical `ready-for-agent` plus a latest `## Agent Brief` with concrete acceptance criteria. `ready-for-agent` or `ready-for-human` issues may move to `in-progress`, then `done`. `type: PRD` does not move through this state machine; the maintainer may only close it explicitly as `done` or `wontfix`. The maintainer can override at any time - flag transitions that look unusual and ask before proceeding.
 
 ## Invocation
 
@@ -62,7 +61,7 @@ The maintainer invokes `/triage` and describes what they want in natural languag
 
 ## Show what needs attention
 
-Query the issue tracker using mapped tracker `status` front matter values, then present three canonical buckets, oldest first:
+Query the issue tracker using mapped tracker `status` front matter values, then present three canonical buckets for implementation issues, oldest first:
 
 1. **Missing `status`** - never triaged.
 2. **`needs-triage`** - evaluation in progress.
@@ -72,9 +71,9 @@ Show counts and a one-line summary per issue. Let the maintainer pick.
 
 ## Triage a specific issue
 
-1. **Gather context.** Read the full issue or PRD, including YAML front matter (`type`, `category`, `status`, `blocked_by`), body, comments, reporter if present, and dates if present. Parse any prior triage notes so you don't re-ask resolved questions. Explore the codebase using the project's domain glossary, respecting ADRs in the area. Read `.out-of-scope/*.md` and surface any prior rejection that resembles this issue.
+1. **Gather context.** Read the full issue or PRD, including YAML front matter (`type`, plus `category`, `status`, and `blocked_by` when present), body, comments, reporter if present, and dates if present. Parse any prior triage notes so you don't re-ask resolved questions. Explore the codebase using the project's domain glossary, respecting ADRs in the area. Read `.out-of-scope/*.md` and surface any prior rejection that resembles this issue.
 
-2. **Recommend.** Tell the maintainer your type, category, blocker, and state recommendation with reasoning, plus a brief codebase summary relevant to the item. For `type: PRD`, recommend only `needs-info`, `ready-for-slicing`, or `wontfix`; `ready-for-slicing` means the PRD is approved for issue slicing via `/to-issues`. For `type: Issue`, use the normal delivery states. Wait for direction.
+2. **Recommend.** Tell the maintainer your type, category, blocker, and state recommendation with reasoning, plus a brief codebase summary relevant to the item. For `type: PRD`, recommend leaving it open with no `status` unless the maintainer explicitly wants to close it as `done` or `wontfix`. For `type: Issue`, use the normal delivery states. Wait for direction.
 
 3. **Reproduce (bugs only).** Before any grilling, attempt reproduction: read the reporter's steps, trace the relevant code, run tests or commands. Report what happened - successful repro with code path, failed repro, or insufficient detail (a strong `needs-info` signal). A confirmed repro makes a much stronger agent brief.
 
@@ -82,18 +81,17 @@ Show counts and a one-line summary per issue. Let the maintainer pick.
 
 5. **Apply the outcome:**
    - `ready-for-agent` - valid only for `type: Issue`, and only when the issue already has or will receive a latest `## Agent Brief` with concrete acceptance criteria. Post or update the agent brief comment ([AGENT-BRIEF.md](AGENT-BRIEF.md)) using any grilling output as source material before leaving the issue in this state.
-   - `ready-for-slicing` for `type: PRD` - update the front matter `status` value and post a triage note saying: "PRD approved for issue slicing via `/to-issues`." Do not write an agent brief.
    - `ready-for-human` for `type: Issue` - same structure as an agent brief, but note why it can't be delegated (judgment calls, external access, design decisions, manual testing).
    - `needs-info` - post triage notes with established facts from grilling and specific remaining questions.
    - `in-progress` - update the front matter `status` value and add a short note about who picked it up or what started.
-   - `done` - update the front matter `status` value and add a short completion note.
+   - `done` - update the front matter `status` value and add a short completion note. For `type: PRD`, do this only on explicit maintainer direction.
    - `wontfix` (bug) - set front matter `status` to `wontfix` and add a polite explanation.
-   - `wontfix` (enhancement) - write to `.out-of-scope/`, link to it from a note, and set front matter `status` to `wontfix` ([OUT-OF-SCOPE.md](OUT-OF-SCOPE.md)).
+   - `wontfix` (enhancement) - write to `.out-of-scope/`, link to it from a note, and set front matter `status` to `wontfix` ([OUT-OF-SCOPE.md](OUT-OF-SCOPE.md)). For `type: PRD`, do this only on explicit maintainer direction.
    - `needs-triage` - update the front matter `status` value. Add a note if grilling produced partial facts but not enough for another state.
 
 ## Quick state override
 
-If the maintainer says "move this to ready-for-agent", trust them on the target state only for `type: Issue`. If the item is `type: PRD`, flag the mismatch and ask whether they mean `ready-for-slicing` for `/to-issues`. Confirm what you're about to do (`status` front matter change, note, out-of-scope write if any), then act. Skip grilling.
+If the maintainer says "move this to ready-for-agent", trust them on the target state only for `type: Issue`. If the item is `type: PRD`, flag the mismatch and ask whether they instead want to leave it open with no `status`, or explicitly close it as `done` or `wontfix`. Confirm what you're about to do (`status` front matter change, note, out-of-scope write if any), then act. Skip grilling.
 
 If a quick override moves an implementation issue to `ready-for-agent`, you must preserve the agent contract:
 

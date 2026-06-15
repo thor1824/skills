@@ -13,7 +13,7 @@ The issue tracker and triage status vocabulary should have been provided to you 
 
 ### 1. Gather context
 
-Work from whatever is already in the conversation context. If the user passes an issue reference (issue number, URL, or path) as an argument, fetch it from the issue tracker and read its full body and comments. If the source is a PRD from the local tracker, expect `type: PRD` in YAML front matter; if it is still in triage, note that `/triage` should approve it for issue slicing by moving it to canonical `ready-for-slicing` first unless the maintainer explicitly overrides.
+Work from whatever is already in the conversation context. If the user passes an issue reference (issue number, URL, or path) as an argument, fetch it from the issue tracker and read its full body and comments. If the source is a PRD from the local tracker, expect `type: PRD` in YAML front matter. Treat a saved PRD file with no `status` as already approved and open. If the PRD has `status: done` or `status: wontfix`, treat it as closed and refuse to create issues from it unless the maintainer explicitly asks to reopen it first.
 
 ### 2. Explore the codebase (optional)
 

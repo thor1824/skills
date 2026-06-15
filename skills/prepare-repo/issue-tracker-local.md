@@ -7,11 +7,12 @@ Issues and PRDs for this repo live as markdown files in `.scratch/`.
 - One feature per directory: `.scratch/<feature-slug>/`
 - The PRD is `.scratch/<feature-slug>/PRD.md`
 - Implementation issues are `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01`
-- PRDs and implementation issues start with YAML front matter containing `type`, `status`, `category`, and `blocked_by`
-- PRDs use `type: PRD`; implementation issues use `type: Issue`
-- Issue state is recorded as the front matter `status` value (see `triage-labels.md` for the allowed status strings)
-- When known, issue category is recorded as `category: bug` or `category: enhancement`
-- Blockers are recorded as a front matter `blocked_by` list; use `blocked_by: []` when there are no blockers
+- PRDs and implementation issues start with YAML front matter, but they do not use the same fields
+- PRDs use `type: PRD` when open, and may later add only `status: done` or `status: wontfix` when explicitly closed
+- Implementation issues use `type: Issue`
+- Implementation issue state is recorded as the front matter `status` value (see `triage-labels.md` for the allowed status strings)
+- When known, implementation issue category is recorded as `category: bug` or `category: enhancement`
+- Implementation issue blockers are recorded as a front matter `blocked_by` list; use `blocked_by: []` when there are no blockers
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
 
 ## Naming rules
@@ -29,7 +30,8 @@ Create a new file under `.scratch/<feature-slug>/` (creating the directory if ne
 - PRD: `.scratch/<feature-slug>/PRD.md` with `type: PRD` in YAML front matter
 - Implementation issue: `.scratch/<feature-slug>/issues/<NN>-<slug>.md` with `type: Issue` in YAML front matter
 
-If the item should enter triage, include a front matter `status` value using the tracker value mapped from the canonical state in `triage-labels.md`.
+- New PRD: write only `type: PRD` in front matter. Do not add `status`, `category`, or `blocked_by` when creating it.
+- New implementation issue entering triage: include a front matter `status` value using the tracker value mapped from the canonical state in `triage-labels.md`.
 
 ## When a skill says "fetch the relevant ticket"
 
@@ -37,7 +39,7 @@ Read the file at the referenced path. The user will normally pass the path or th
 
 ## When a skill says "query the issue tracker"
 
-Search `.scratch/**/*.md` and group items by their front matter `status` value. If dates are present, sort oldest first; otherwise use path order.
+Search `.scratch/**/*.md` and group implementation issues by their front matter `status` value. Treat PRDs with no `status` as open, approved PRDs rather than "missing status" triage items. If dates are present, sort oldest first; otherwise use path order.
 
 ## When a skill says "post a comment" or "add a note"
 
@@ -45,4 +47,4 @@ Append the note under the issue file's `## Comments` heading. Create that headin
 
 ## When a skill says "close" an issue
 
-Set the issue front matter `status` to the closing state, usually `done` or `wontfix`.
+Set the item front matter `status` to the closing state, usually `done` or `wontfix`. For PRDs, only do this on explicit maintainer direction.
