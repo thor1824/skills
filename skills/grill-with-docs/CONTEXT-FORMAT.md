@@ -29,11 +29,11 @@ _Avoid_: Client, buyer, account
 ## Example dialogue
 
 > **Dev:** "When a **Customer** places an **Order**, do we create the **Invoice** immediately?"
-> **Domain expert:** "No — an **Invoice** is only generated once a **Fulfillment** is confirmed."
+> **Domain expert:** "No - an **Invoice** is only generated once a **Fulfillment** is confirmed."
 
 ## Flagged ambiguities
 
-- "account" was used to mean both **Customer** and **User** — resolved: these are distinct concepts.
+- "account" was used to mean both **Customer** and **User** - resolved: these are distinct concepts.
 ```
 
 ## Rules
@@ -57,21 +57,23 @@ _Avoid_: Client, buyer, account
 
 ## Contexts
 
-- [Ordering](./src/ordering/CONTEXT.md) — receives and tracks customer orders
-- [Billing](./src/billing/CONTEXT.md) — generates invoices and processes payments
-- [Fulfillment](./src/fulfillment/CONTEXT.md) — manages warehouse picking and shipping
+- [Ordering](./src/ordering/CONTEXT.md) - receives and tracks customer orders
+- [Billing](./src/billing/CONTEXT.md) - generates invoices and processes payments
+- [Fulfillment](./src/fulfillment/CONTEXT.md) - manages warehouse picking and shipping
 
 ## Relationships
 
-- **Ordering → Fulfillment**: Ordering emits `OrderPlaced` events; Fulfillment consumes them to start picking
-- **Fulfillment → Billing**: Fulfillment emits `ShipmentDispatched` events; Billing consumes them to generate invoices
-- **Ordering ↔ Billing**: Shared types for `CustomerId` and `Money`
+- **Ordering -> Fulfillment**: Ordering emits `OrderPlaced` events; Fulfillment consumes them to start picking
+- **Fulfillment -> Billing**: Fulfillment emits `ShipmentDispatched` events; Billing consumes them to generate invoices
+- **Ordering <-> Billing**: Shared types for `CustomerId` and `Money`
 ```
 
 The skill infers which structure applies:
 
 - If `CONTEXT-MAP.md` exists, read it to find contexts
+- If repeated context-local `CONTEXT.md` files or multiple `docs/adr/` directories exist, treat that as a strong multi-context signal even without `CONTEXT-MAP.md`
 - If only a root `CONTEXT.md` exists, single context
-- If neither exists, create a root `CONTEXT.md` lazily when the first term is resolved
+- If neither exists and documentation edits are in scope, create a root `CONTEXT.md` lazily when the first term is resolved
+- If equivalent domain docs already exist elsewhere in the repo, prefer those over creating new files just to match this convention
 
-When multiple contexts exist, infer which one the current topic relates to. If unclear, ask.
+When multiple contexts exist, infer which one the current topic relates to for discussion. Prefer the context that owns the core noun or aggregate being discussed. If you are about to edit docs and ownership is not unambiguous, ask before writing.
