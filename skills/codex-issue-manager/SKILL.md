@@ -1,5 +1,5 @@
 ---
-name: issue-manager
+name: codex-issue-manager
 description: Orchestrate ready local-markdown issues through deterministic claim, worker worktree preparation, worker completion, and serialized merge using an ESM Node manager plus the installed `issue_manager_worker` subagent. Requires `node`, `git`, `git worktree`, and Codex `multi_agent_v1.spawn_agent`/`wait_agent`/`close_agent` support. Use when the user wants to run the AFK implementation loop, inspect manager status, or inspect leftover manager artifacts.
 disable-model-invocation: true
 ---
