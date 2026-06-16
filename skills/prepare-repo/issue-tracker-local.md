@@ -23,9 +23,9 @@ Issues and PRDs for this repo live as markdown files in `.scratch/`.
 - Derive issue file slugs from the issue title using lowercase kebab-case.
 - Number implementation issues by incrementing the highest existing `NN` in `.scratch/<feature-slug>/issues/`, starting at `01`.
 
-## Issue-manager prerequisites
+## Optional issue-manager prerequisites
 
-- `/issue-manager` assumes `/prepare-repo` has also updated `.gitignore` to ignore `.worktrees/` and `.agents/issue-manager/`.
+- If an `issue-manager` skill or workflow is installed, it assumes the `prepare-repo` skill has also updated `.gitignore` to ignore `.worktrees/` and `.agents/issue-manager/`.
 - `.worktrees/` is reserved for manager-created git worktrees. Do not commit files from this directory.
 - `.agents/issue-manager/` is reserved for worker reports and manager runtime artifacts. Do not commit files from this directory.
 - Implementation issue blockers should be recorded as repo-relative issue paths in `blocked_by`, for example `.scratch/feature/issues/01-setup.md`.

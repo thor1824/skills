@@ -1,7 +1,6 @@
 ---
 name: prepare-repo
 description: Sets up an `## Agent skills` block in `AGENTS.md` and `docs/agents/` so the engineering skills know this repo's local markdown issue tracker, triage status vocabulary, and domain doc layout.
-disable-model-invocation: true
 ---
 
 # Prepare Repo
@@ -10,7 +9,7 @@ Scaffold the per-repo configuration that the engineering skills assume:
 
 - **Issue tracker** - where issues live in local Markdown
 - **Triage statuses** - the front matter strings used for the seven canonical implementation-issue states
-- **Domain docs** - where `CONTEXT.md` and ADRs live, how `/grill-with-docs` produces them, and how consumer skills read them
+- **Domain docs** - where `CONTEXT.md` and ADRs live, how the `grill-with-docs` skill produces them, and how consumer skills read them
 
 This is a prompt-driven skill, not a deterministic script. Explore, present what you found, confirm with the user, then write.
 
@@ -68,7 +67,7 @@ Default: each canonical status string equals its name. Ask the user if they want
 
 **Section C - Domain docs.**
 
-> Explainer: `/grill-with-docs` updates `CONTEXT.md` and `docs/adr/` lazily when terminology or durable decisions are resolved. Other skills (`to-prd`, `to-issues`, `triage`, `improve-codebase-architecture`, `diagnose`, `tdd`) read those files to use the project's domain language and respect past architectural decisions. They need to know whether the repo has one global context or multiple (e.g. a monorepo with separate frontend/backend contexts) so they look in the right place.
+> Explainer: The `grill-with-docs` skill updates `CONTEXT.md` and `docs/adr/` lazily when terminology or durable decisions are resolved. Other skills (`to-prd`, `to-issues`, `triage`, `improve-codebase-architecture`, `diagnose`, `tdd`) read those files to use the project's domain language and respect past architectural decisions. They need to know whether the repo has one global context or multiple (e.g. a monorepo with separate frontend/backend contexts) so they look in the right place.
 
 Confirm the layout:
 
@@ -77,7 +76,7 @@ Confirm the layout:
 
 **Section D - Issue manager prerequisites.**
 
-> Explainer: `/issue-manager` creates repo-local git worktrees and worker report files while it orchestrates AFK issue implementation. Those operational artifacts must stay out of version control so the manager can create them without making the repo appear dirty.
+> Explainer: If an `issue-manager` skill or workflow is installed for this repo, it may create repo-local git worktrees and worker report files while it orchestrates AFK issue implementation. Those operational artifacts must stay out of version control so the manager can create them without making the repo appear dirty.
 
 Confirm the repo-local ignore rules:
 
@@ -123,11 +122,21 @@ The block:
 [one-line summary of layout - "single-context" or "multi-context"]. See `docs/agents/domain.md`.
 ```
 
+Create `docs/agents/` first if it does not already exist.
+
 Then write the three docs files using the seed templates in this skill folder as a starting point:
 
 - [issue-tracker-local.md](./issue-tracker-local.md) - local-markdown issue tracker
 - [triage-labels.md](./triage-labels.md) - status mapping
 - [domain.md](./domain.md) - domain doc consumer rules + layout
+
+Do not copy the seed files blindly. Rewrite them to match the answers the user confirmed:
+
+- `docs/agents/issue-tracker.md` - keep the local-markdown structure and fixed rules unless the user explicitly changed them, but update the prose summary so it matches the confirmed feature directory, PRD path, issue path, naming, and front-matter conventions used in this repo.
+- `docs/agents/triage-labels.md` - keep the seven canonical states, but rewrite the `status` value column so each row uses the exact tracker string the user confirmed for that canonical state.
+- `docs/agents/domain.md` - keep the consumer guidance, but rewrite the layout section to match the confirmed repo shape. For single-context repos, keep only the single-context example and describe the root `CONTEXT.md` plus `docs/adr/` layout. For multi-context repos, keep only the multi-context example and describe `CONTEXT-MAP.md`, shared ADRs, and per-context docs.
+
+If any of `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, or `docs/agents/domain.md` already exist, diff the current contents against your new draft and preserve any user-authored material that is still compatible with the newly confirmed choices. Do not silently replace those files wholesale if the user has edited them. If preserving and updating in place would be ambiguous, show the diff or draft and ask before overwriting.
 
 Then update `.gitignore` so it contains:
 
@@ -138,6 +147,12 @@ Then update `.gitignore` so it contains:
 
 Add the entries if they are missing; do not duplicate them if they already exist.
 
+After writing, verify the result by re-reading the edited files:
+
+- confirm the `## Agent skills` block exists exactly once in `AGENTS.md`
+- confirm `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, and `docs/agents/domain.md` exist and reflect the confirmed answers
+- confirm `.worktrees/` and `.agents/issue-manager/` each appear exactly once in `.gitignore`
+
 ### 5. Done
 
-Tell the user the setup is complete, that `/grill-with-docs` will produce domain docs lazily, and which engineering skills will now read from these files. Mention they can edit `docs/agents/*.md` directly later - re-running this skill is only necessary if they want to change the local markdown conventions, the issue-manager ignore rules, or restart from scratch.
+Tell the user the setup is complete, that the `grill-with-docs` skill will produce domain docs lazily, and which engineering skills will now read from these files. Mention they can edit `docs/agents/*.md` directly later - re-running this skill is only necessary if they want to change the local markdown conventions, the optional issue-manager ignore rules, or restart from scratch.
