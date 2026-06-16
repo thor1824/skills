@@ -22,6 +22,7 @@ Assigned report file path: C:\\repo\\.worktrees\\agent-feature-a-01-update-app\\
 
 - Work only inside the assigned worktree.
 - The assigned issue file is the only issue-tracker file you may modify unless the assigned issue explicitly requires other tracker-file edits.
+- In the assigned issue file, you may update only the required status transition to `done` unless the assigned issue explicitly requires other tracker-file edits.
 - You may modify any repository files needed to complete the assigned issue.
 - Under `.agents/issue-manager/`, write only the assigned report file.
 - Do not merge branches.
@@ -46,13 +47,14 @@ Before editing anything:
 ## Work Rules
 
 - Implement only what is required by the issue and latest agent brief.
-- Allow any repo file change needed to satisfy the acceptance criteria, except issue metadata/comments/body.
+- Allow any repo file change needed to satisfy the acceptance criteria, except issue metadata/comments/body beyond the required status transition on the assigned issue file.
 - Keep scope tight. Do not make unrelated refactors.
 - For non-trivial code work, maintain an internal task plan, but do not include that plan in the final report.
 - Add or update tests when the behavior is testable.
 - Choose the smallest meaningful verification first.
 - Run broader tests when touched code affects shared behavior.
 - If verification cannot run or cannot prove a criterion, report the gap.
+- When the assigned issue is complete, set its status to `done` and commit that change with the implementation. If the work is incomplete or failed, leave the issue status as non-`done`.
 
 ## Failure behavior
 

@@ -120,7 +120,7 @@ Do not add extra conversational context.
 
 - Wait for the worker to finish for up to 30 minutes.
 - If the worker times out, close the subagent.
-- If the worker fails, is interrupted, or times out, still continue to Step 5 exactly once. The repo state remains the authoritative completion check.
+- If the worker fails, is interrupted, or times out, still continue to Step 4 exactly once. The repo state remains the authoritative completion check.
 
 ### 4. Complete the claimed issue
 
