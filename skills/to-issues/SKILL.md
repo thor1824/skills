@@ -53,7 +53,7 @@ Iterate until the user approves the breakdown.
 
 For each approved slice, publish a new issue to the issue tracker. Use the issue body template below. Include YAML front matter with `type: Issue` and the tracker-specific `status` value mapped from canonical `needs-triage` so each issue enters the normal triage flow. Set `category` from the source material; default to `enhancement` for PRD or feature-plan slices.
 
-Publish issues in dependency order (blockers first) so you can reference real issue identifiers in the `blocked_by` front matter field.
+Publish issues in dependency order (blockers first) so you can reference real repo-relative issue paths in the `blocked_by` front matter field. Do not use bare issue numbers, titles, or synthetic ids there. Each blocker entry must point to an issue file path such as `.scratch/<feature-slug>/issues/01-setup.md`.
 
 <issue-template>
 ---
@@ -84,12 +84,20 @@ A concise description of this vertical slice. Describe the end-to-end behavior, 
 
 ## Blocked by
 
-- List the same blocking ticket refs as `blocked_by` if extra explanation is useful.
+- List the same repo-relative issue paths as `blocked_by` if extra explanation is useful.
 
 Or "None - can start immediately" if `blocked_by` is empty.
 
 </issue-template>
 
 For new issues, `## User stories covered` is required whenever the source PRD has numbered user stories. Use explicit `PRD story <N>` references so downstream orchestration can review coverage without inference.
+
+For `blocked_by`, always write repo-relative issue paths in the front matter list, for example:
+
+```yaml
+blocked_by:
+  - .scratch/<feature-slug>/issues/01-setup.md
+  - .scratch/<feature-slug>/issues/02-add-api.md
+```
 
 Do NOT close or modify any parent issue.

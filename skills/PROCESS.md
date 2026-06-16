@@ -20,7 +20,7 @@ This repo defines a local Markdown issue process for TSDA engineering skills.
 4. `/to-issues`
    - Breaks a PRD or plan into independently-grabbable vertical slices.
    - Publishes implementation issues at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`.
-   - Emits YAML front matter with `type: Issue`, `blocked_by`, and the tracker value mapped from canonical `needs-triage` so each issue enters triage.
+   - Emits YAML front matter with `type: Issue`, `blocked_by` as repo-relative issue paths, and the tracker value mapped from canonical `needs-triage` so each issue enters triage.
 
 5. `/triage`
    - Reads local Markdown PRDs and issues, assigns or verifies the front matter fields relevant to each item type.
@@ -54,10 +54,10 @@ Each producer skill must emit the fields the next consumer needs. In practice:
 
 - Any new implementation issue entering triage should include front matter `type` and the `status` value mapped from canonical `needs-triage`.
 - Any implementation issue already classifiable should include exactly one front matter `category` value.
-- Any implementation issue with dependencies should include front matter `blocked_by`; use `blocked_by: []` for unblocked items.
+- Any implementation issue with dependencies should include front matter `blocked_by` as repo-relative issue paths such as `.scratch/feature/issues/01-setup.md`; use `blocked_by: []` for unblocked items.
 - A PRD written by `/to-prd` is already approved. Open PRDs have no `status`; closed PRDs use only `status: done` or `status: wontfix`.
 - `ready-for-human` means "human action required" for implementation issues only.
-- `ready-for-agent` means the mapped tracker `status` for canonical `ready-for-agent` plus a latest `## Agent Brief` with concrete acceptance criteria.
+- `ready-for-agent` means the mapped tracker `status` for canonical `ready-for-agent` plus the latest `## Agent Brief` in the issue file, with concrete acceptance criteria.
 - Anything resolved by `/grill-with-docs` should survive as `CONTEXT.md` terms, ADRs, issue comments, PRD text, or agent brief material.
 - Anything delegated to an AFK agent should include an agent brief with current behavior, desired behavior, key interfaces, acceptance criteria, and out-of-scope notes.
 - Anything delegated through `/issue-manager` should leave a dedicated worker worktree under `.worktrees/`, a report file under `.agents/issue-manager/`, and a committed issue-state transition trail (`in-progress` then `done`) in git history.

@@ -337,19 +337,19 @@ function Parse-IssueFile {
     }
 }
 
-function Get-FirstAgentBriefSection {
+function Get-LatestAgentBriefSection {
     param([string]$Content)
 
-    $match = [Regex]::Match($Content, '(?ms)^## Agent Brief\s*$')
-    if (-not $match.Success) {
+    $headingMatches = [Regex]::Matches($Content, '(?m)^## Agent Brief\s*$')
+    if ($headingMatches.Count -eq 0) {
         return $null
     }
 
-    $start = $match.Index
+    $start = $headingMatches[$headingMatches.Count - 1].Index
     $remaining = $Content.Substring($start)
-    $headingMatches = [Regex]::Matches($remaining, '(?m)^## .+$')
-    if ($headingMatches.Count -gt 1) {
-        return $remaining.Substring(0, $headingMatches[1].Index).Trim()
+    $nextHeadings = [Regex]::Matches($remaining, '(?m)^## .+$')
+    if ($nextHeadings.Count -gt 1) {
+        return $remaining.Substring(0, $nextHeadings[1].Index).Trim()
     }
 
     return $remaining.Trim()
@@ -358,7 +358,7 @@ function Get-FirstAgentBriefSection {
 function Test-AgentBriefValid {
     param([string]$Content)
 
-    $brief = Get-FirstAgentBriefSection -Content $Content
+    $brief = Get-LatestAgentBriefSection -Content $Content
     if (-not $brief) {
         return $false
     }
@@ -366,6 +366,7 @@ function Test-AgentBriefValid {
     $requiredMarkers = @(
         '\*\*Current behavior:\*\*',
         '\*\*Desired behavior:\*\*',
+        '\*\*Key interfaces:\*\*',
         '\*\*Acceptance criteria:\*\*',
         '\*\*Out of scope:\*\*'
     )
