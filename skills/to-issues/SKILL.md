@@ -1,19 +1,28 @@
 ---
 name: to-issues
-description: Break a plan, spec, or PRD into independently-grabbable issues on the project issue tracker using tracer-bullet vertical slices. Use when user wants to convert a plan into issues, create implementation tickets, or break down work into issues.
+description: Break a plan, spec, or PRD into independently-grabbable repo-local markdown issues under `.scratch/` using tracer-bullet vertical slices. Use when user wants to convert a plan into issues, create implementation tickets, or break down work into issues.
 ---
 
 # To Issues
 
 Break a plan into independently-grabbable issues using vertical slices (tracer bullets).
 
-The issue tracker and triage status vocabulary should have been provided to you - run `/prepare-repo` if not. Before writing any `status` value in issue front matter, read `docs/agents/triage-labels.md` and use the tracker value mapped from the canonical state name.
+The issue tracker and triage status vocabulary should already be configured for the repo.
+
+Before drafting or publishing issues, run this preflight:
+
+- Read `AGENTS.md` and look for an `## Agent skills` section.
+- Read `docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md`.
+- Read `docs/agents/domain.md`, then load the `CONTEXT.md`, `CONTEXT-MAP.md`, and ADR locations it says apply to this repo before naming slices or writing issue bodies.
+- Before writing any `status` value in issue front matter, use the tracker value mapped from the canonical state name in `docs/agents/triage-labels.md`.
+
+If `AGENTS.md` or any of those `docs/agents/*` files are missing, stop and tell the user the repo setup is incomplete. Ask them to run the `prepare-repo` skill that creates `AGENTS.md` and `docs/agents/*` for this repository, or provide equivalent tracker, triage, and domain docs, before continuing.
 
 ## Process
 
 ### 1. Gather context
 
-Work from whatever is already in the conversation context. If the user passes an issue reference (issue number, URL, or path) as an argument, fetch it from the issue tracker and read its full body and comments. If the source is a PRD from the local tracker, expect `type: PRD` in YAML front matter. Treat a saved PRD file with no `status` as already approved and open. If the PRD has `status: done` or `status: wontfix`, treat it as closed and refuse to create issues from it unless the maintainer explicitly asks to reopen it first.
+Work from whatever is already in the conversation context. If the user passes an issue reference (issue number or repo-relative path) as an argument, fetch it from the issue tracker and read its full body and comments. If the source is a PRD from the local tracker, expect `type: PRD` in YAML front matter. Treat a saved PRD file with no `status` as already approved and open. If the PRD has `status: done` or `status: wontfix`, treat it as closed and refuse to create issues from it unless the maintainer explicitly asks to reopen it first.
 
 ### 2. Explore the codebase (optional)
 
