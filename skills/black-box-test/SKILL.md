@@ -15,7 +15,6 @@ description: Language-agnostic guidance for designing and writing automated blac
 6. Run test command(s) for all changed and affected code.
 7. Fix meaningful gaps or list deferred cases explicitly.
 
-
 ### Glossary
 
 - Test Case: one named scenario with specific setup, action, and expected observable outcome.
@@ -25,12 +24,11 @@ description: Language-agnostic guidance for designing and writing automated blac
 - Side effect: an observable change outside the return value, such as writing data, sending a request, logging, emitting an event, or calling another component.
 - Fixture: reusable setup data or objects needed by tests.
 - Collaborator: another component the SUT calls or depends on, such as a database, API client, service, clock, filesystem, or helper.
-- Mock/stub/fake: controlled replacements for real collaborators. Use the repository’s terminology and tools.
+- Mock/stub/fake: controlled replacements for real collaborators. Use the repository's terminology and tools.
 - AAA (Arrange-Act-Assert) pattern:
    - Arrange: Set up inputs and dependencies.
    - Act: Execute the SUT.
    - Assert: Verify observable behavior.
-
 
 ### Non-trivial System Under Test
 
@@ -46,7 +44,6 @@ For non-trivial SUTs produce a test case matrix with the following format:
 behavior | input | boundary | expected outcome | collaborator effects | notes
 ```
 
-
 ## Test Design
 
 ### Repository Conventions Rules
@@ -59,7 +56,6 @@ behavior | input | boundary | expected outcome | collaborator effects | notes
 - You must use AAA pattern implicitly unless the codebase uses another clear equivalent.
 - You must only use the variable name SUT if the codebase already uses that convention.
 
-
 ### Test Case Completeness
 
 - Cover success behavior.
@@ -70,15 +66,13 @@ behavior | input | boundary | expected outcome | collaborator effects | notes
 - Add dedicated cases for mapping, transformation, serialization, parsing, and contract edges when relevant.
 - Prefer representative cases over exhaustive, repeating, or overlapping combinations.
 
-
 ### Parameterization Rules
 
 - Parameterize when cases share same act step, same expected result, and same test procedure.
 - Split tests when outcome type, side effect type, or assertion logic differs materially.
-- Add rows to an existing parameterized test before adding a new method when intent stays same.
+- Add rows to an existing parameterized test before adding a new test when intent stays same.
 - Keep case labels explicit so one failing row is diagnosable.
 - Do not hide different assertions behind conditionals inside one test.
-
 
 ### Implementation Rules
 
@@ -87,8 +81,8 @@ behavior | input | boundary | expected outcome | collaborator effects | notes
 - Prefer fakes or stubs over real I/O, unless real integration is required by the current scope of the test.
 - Avoid sleeps, shared mutable state, hidden ordering assumptions, and random test data that is not seeded, constrained, or clearly relevant to the behavior under test.
 
-
 ## Stop Condition
+
 - If code changes or execution are not possible: provide the test plan, test case matrix when useful, suggested file placement, expected assertions, and the exact information needed to implement or run the tests later.
 - Do not stop at a plan if the user asked for code changes and the relevant files are available.
-- tests are implemented, touched-scope tests pass, and deferred coverage is called out clearly.
+- Stop when tests are implemented, touched-scope tests pass, and deferred coverage is called out clearly.
