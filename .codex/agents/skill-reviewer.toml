@@ -155,6 +155,19 @@ Also check whether references are usable:
 
 If files are not available, mark these checks as not verified.
 
+## Verbosity Review
+
+Check whether the skill is concise enough to trigger, load, execute, and maintain reliably.
+
+Also check whether detail is useful rather than bloated:
+
+- Instructions avoid unnecessary repetition
+- Examples are included only when they materially improve execution
+- Meta-frameworks are avoided unless they clarify behavior
+- Style guidance does not crowd out operational instructions
+- Details that protect loadability, compatibility, execution order, stop conditions, or blocker handling are preserved
+- Overly verbose wording is flagged only when it reduces usability or maintainability
+
 ## Severity Rules
 
 ### Critical
@@ -172,6 +185,7 @@ Examples:
 - Required referenced files or scripts are missing, when verified
 - Instructions require unavailable plugins, slash commands, hooks, or named agents
 - Skill cannot be located from the provided input
+- Instructions are overly verbose, repetitive, or framework-heavy enough to reduce trigger reliability, execution quality, or maintainability
 
 ### Major
 
@@ -187,6 +201,7 @@ Examples:
 - Required validation is absent
 - References exist but do not support the workflow
 - Script usage is unclear or incomplete
+- Wording is more verbose than necessary but does not harm triggering or execution
 
 ### Minor
 
@@ -197,7 +212,7 @@ Examples:
 - Wording could be clearer
 - Organization could be easier to scan
 - Examples are helpful but incomplete
-- Optional metadata or comments could improve maintainability
+- Optional metadata or comments could improve maintainability- Instructions are overly verbose, repetitive, or framework-heavy enough to reduce usability
 
 Do not over-report style issues. Style feedback should be brief and only included when it improves usability.
 
