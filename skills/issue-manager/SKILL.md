@@ -1,6 +1,6 @@
 ---
 name: issue-manager
-description: Orchestrate ready local-markdown issues through deterministic claim, worker worktree preparation, worker completion, and serialized merge using a PowerShell manager plus the dedicated `issue_manager_worker` agent. Use when the user wants to run the AFK implementation loop, inspect manager status, or inspect leftover manager artifacts.
+description: Orchestrate ready local-markdown issues through deterministic claim, worker worktree preparation, worker completion, and serialized merge using an ESM Node manager plus the dedicated `issue_manager_worker` agent. Use when the user wants to run the AFK implementation loop, inspect manager status, or inspect leftover manager artifacts.
 disable-model-invocation: true
 ---
 
@@ -45,9 +45,9 @@ Examples that map to `cleanup`:
 
 - Run this skill from the repository root only.
 - `run` is the only mutating path. `status` and `cleanup` are read-only.
-- Because this repo's `AGENTS.md` requires approval for non-read-only PowerShell commands, request approval before invoking `manager.ps1 run`.
+- `run` mutates the repo. Request approval when the active sandbox policy requires it.
 - `status` and `cleanup` may be invoked without that approval because they are read-only.
-- Do not bypass `manager.ps1` by reimplementing its orchestration logic in chat. The script is the source of truth for claim, prepare, complete, and merge transitions.
+- Do not bypass `manager.mjs` by reimplementing its orchestration logic in chat. The script is the source of truth for claim, prepare, complete, and merge transitions.
 
 ## Read-only flow
 
@@ -55,8 +55,8 @@ For `status` or `cleanup`:
 
 1. Run:
 
-   ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\issue-manager\manager.ps1 <subcommand>
+   ```sh
+   node .\skills\issue-manager\manager.mjs <subcommand>
    ```
 
 2. Parse the JSON result from stdout.
@@ -72,14 +72,14 @@ For `status` or `cleanup`:
 
 ## Run flow
 
-For `run`, act as the thin wrapper around `manager.ps1` and the `issue_manager_worker` agent.
+For `run`, act as the thin wrapper around `manager.mjs` and the `issue_manager_worker` agent.
 
 ### 1. Claim or stop
 
 Run:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\issue-manager\manager.ps1 run
+```sh
+node .\skills\issue-manager\manager.mjs run
 ```
 
 Interpret the JSON response:
@@ -126,8 +126,8 @@ Do not add extra conversational context.
 
 Always run exactly one completion pass after the worker ends:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\issue-manager\manager.ps1 complete -IssuePath <claimed issue path>
+```sh
+node .\skills\issue-manager\manager.mjs complete --issue-path <claimed issue path>
 ```
 
 Interpret the JSON response:

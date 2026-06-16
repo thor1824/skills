@@ -20,6 +20,9 @@ The fixture application text file contains the original placeholder value.
 **Desired behavior:**
 The fixture application text file should be updated by the worker implementation.
 
+**Key interfaces:**
+- `src/app.txt`
+
 **Acceptance criteria:**
 - [ ] The worker updates `src/app.txt`
 - [ ] The issue is moved to `done`

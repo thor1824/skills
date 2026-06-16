@@ -16,6 +16,9 @@ The fixture application file contains only the original value.
 **Desired behavior:**
 The first worker changes the base fixture application file.
 
+**Key interfaces:**
+- `src/app.txt`
+
 **Acceptance criteria:**
 - [ ] The worker changes `src/app.txt`
 - [ ] The issue is marked `done`

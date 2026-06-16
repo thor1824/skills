@@ -34,7 +34,7 @@ This repo defines a local Markdown issue process for TSDA engineering skills.
 6. `/issue-manager`
    - Requires `/prepare-repo` to have established the local tracker contract in `docs/agents/` and the ignore rules for `.worktrees/` and `.agents/issue-manager/`.
    - Scans `.scratch/**/issues/*.md` for implementation issues that are `ready-for-agent`, unblocked, and structurally valid for AFK execution.
-   - Claims one issue at a time by moving it to `in-progress` on the current clean integration branch, committing that claim, then preparing a dedicated worker branch and worktree.
+   - Claims one issue at a time by moving it to `in-progress` on the current clean integration branch, committing that claim, then preparing a dedicated worker branch and worktree through the ESM manager entrypoint at `skills/issue-manager/manager.mjs`.
    - Delegates implementation to the dedicated `issue_manager_worker` subagent, which reads the issue's latest `## Agent Brief`, works only inside the assigned worktree, updates the issue to `done`, and writes a completion report at `.agents/issue-manager/reports/<feature-slug>-<issue-stem>.md` inside that worktree.
    - Merges one completed worker branch at a time back into the integration branch and rescans the tracker after each successful merge.
    - Stops on the first worker, validation, or merge failure and leaves the worker branch/worktree available for manual review.

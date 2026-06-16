@@ -17,6 +17,10 @@ The follow-up issue is blocked until the base change is done.
 **Desired behavior:**
 Once the blocker is done, the issue should become eligible for the worker loop.
 
+**Key interfaces:**
+- `.scratch/feature-b/issues/01-base-change.md`
+- `.scratch/feature-b/issues/02-follow-up.md`
+
 **Acceptance criteria:**
 - [ ] The issue remains blocked until `01-base-change.md` is done
 - [ ] The issue becomes claimable after the blocker is merged

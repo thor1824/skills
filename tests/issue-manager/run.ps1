@@ -5,7 +5,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $script:RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$script:ManagerScript = Join-Path $script:RepoRoot 'skills\issue-manager\manager.ps1'
+$script:ManagerScript = Join-Path $script:RepoRoot 'skills\issue-manager\manager.mjs'
 $script:TempRoot = Join-Path ([IO.Path]::GetTempPath()) ("issue-manager-tests-" + [guid]::NewGuid().ToString('n'))
 
 function New-TestFailure {
@@ -84,7 +84,7 @@ function Invoke-Manager {
 
     Push-Location $RepoPath
     try {
-        $output = & powershell -NoProfile -ExecutionPolicy Bypass -File $script:ManagerScript @Arguments 2>&1
+        $output = & node $script:ManagerScript @Arguments 2>&1
         $exitCode = $LASTEXITCODE
     }
     finally {
@@ -92,7 +92,7 @@ function Invoke-Manager {
     }
 
     if ($exitCode -ne 0) {
-        throw "manager.ps1 $($Arguments -join ' ') failed with exit code ${exitCode}: $output"
+        throw "manager.mjs $($Arguments -join ' ') failed with exit code ${exitCode}: $output"
     }
 
     return [pscustomobject]@{
