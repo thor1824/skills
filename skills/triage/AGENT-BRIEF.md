@@ -1,6 +1,6 @@
 # Writing Agent Briefs
 
-An agent brief is a structured comment posted on an issue tracker item when it moves to `ready-for-agent`. It is the authoritative specification that an AFK agent will work from. The original issue body and discussion are context — the agent brief is the contract.
+An agent brief is a structured comment posted on an issue tracker item when it moves to `ready-for-agent`. It is the authoritative specification that an AFK agent will work from. The original issue body and discussion are context - the agent brief is the contract.
 
 Every posted agent brief must start with the triage disclaimer:
 
@@ -16,7 +16,7 @@ The issue may sit in `ready-for-agent` for days or weeks. The codebase will chan
 
 - **Do** describe interfaces, types, and behavioral contracts
 - **Do** name specific types, function signatures, or config shapes that the agent should look for or modify
-- **Don't** reference file paths — they go stale
+- **Don't** reference file paths - they go stale
 - **Don't** reference line numbers
 - **Don't** assume the current implementation structure will remain the same
 
@@ -26,7 +26,7 @@ Describe **what** the system should do, not **how** to implement it. The agent w
 
 - **Good:** "The `SkillConfig` type should accept an optional `schedule` field of type `CronExpression`"
 - **Bad:** "Open src/types/skill.ts and add a schedule field on line 42"
-- **Good:** "When a user runs `/triage` with no arguments, they should see a summary of issues needing attention"
+- **Good:** "When a maintainer uses the `triage` skill with no specific issue, they should see a summary of issues needing attention"
 - **Bad:** "Add a switch statement in the main handler function"
 
 ### Complete acceptance criteria
@@ -59,9 +59,9 @@ Describe what should happen after the agent's work is complete.
 Be specific about edge cases and error conditions.
 
 **Key interfaces:**
-- `TypeName` — what needs to change and why
-- `functionName()` return type — what it currently returns vs what it should return
-- Config shape — any new configuration options needed
+- `TypeName` - what needs to change and why
+- `functionName()` return type - what it currently returns vs what it should return
+- Config shape - any new configuration options needed
 
 **Acceptance criteria:**
 - [ ] Specific, testable criterion 1
@@ -95,7 +95,7 @@ Truncation should break at the last word boundary before 1024 characters
 and append "..." to indicate truncation.
 
 **Key interfaces:**
-- The `SkillMetadata` type's `description` field — no type change needed,
+- The `SkillMetadata` type's `description` field - no type change needed,
   but the validation/processing logic that populates it needs to respect
   word boundaries
 - Any function that reads SKILL.md frontmatter and extracts the description
@@ -135,14 +135,14 @@ requested the feature. When triaging new issues, these files should be
 checked for matches.
 
 **Key interfaces:**
-- Markdown file format in `.out-of-scope/` — each file should have a
+- Markdown file format in `.out-of-scope/` - each file should have a
   `# Concept Name` heading, a `**Decision:**` line, a `**Reason:**` line,
   and a `**Prior requests:**` list with issue links
 - The triage workflow should read all `.out-of-scope/*.md` files early
   and match incoming issues against them by concept similarity
 
 **Acceptance criteria:**
-- [ ] Moving a feature to front matter `status: wontfix` creates/updates a file in `.out-of-scope/`
+- [ ] Moving a feature to front matter `status: wontfix` creates or updates a file in `.out-of-scope/`
 - [ ] The file includes the decision, reasoning, and link to the issue marked `wontfix`
 - [ ] If a matching `.out-of-scope/` file already exists, the new issue is
       appended to its "Prior requests" list rather than creating a duplicate
