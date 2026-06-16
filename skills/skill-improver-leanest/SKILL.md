@@ -67,6 +67,8 @@ Preserve the skill's intended purpose, useful behavior, and required runtime-spe
 
 Remove unsupported runtime assumptions unless the user explicitly wants that runtime.
 
+When fixing verbosity findings, reduce repetition and remove low-value examples or meta-frameworks. Preserve instructions that affect loadability, compatibility, execution order, stop conditions, or blocker handling.
+
 ## Completion Output
 
 End with:

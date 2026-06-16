@@ -67,6 +67,8 @@ Preserve the subagent's intended purpose, useful behavior, and required runtime-
 
 Remove unsupported runtime assumptions unless the user explicitly wants that runtime.
 
+When fixing verbosity findings, reduce repetition and remove low-value examples or meta-frameworks. Preserve instructions that affect loadability, compatibility, execution order, stop conditions, or blocker handling.
+
 ## Compatibility Rules
 
 For OpenAI/Codex custom subagents, preserve the required TOML fields:

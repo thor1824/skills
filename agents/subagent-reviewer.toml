@@ -92,30 +92,37 @@ Flag issues such as:
 - Instructions that depend on hidden context or undeclared project state
 - Output format missing when the subagent is intended for repeated review loops
 
-## Stop Condition Checks
+## Stop Condition Review
 
-Report a major finding when the reviewed subagent lacks clear stop conditions for its role.
+Check whether the subagent clearly says when to stop, return control, or report blockers.
 
-Check whether the subagent says when to stop, return control, or report blockers.
+Also check whether stop conditions fit the subagent's role:
 
-For reviewer-style subagents, clear stop conditions should usually say:
+* Single-pass subagents return one review, analysis, or result, then stop
+* Reviewer subagents do not edit files, start fix loops, or re-review unless invoked again
+* Fixer or orchestrator subagents define completion criteria
+* Repeated attempts have a bounded retry or cycle limit
+* Missing input, unavailable tools, or unresolved blockers are reported instead of causing indefinite work
 
-- Return one review report and stop
-- Do not edit files
-- Do not start a fix loop
-- Do not re-review unless invoked again
-- Report insufficient input as `Not verified` or a blocker, then stop
+## Verbosity Review
 
-For fixer, improver, or orchestrator subagents, clear stop conditions should usually say:
+Check whether the subagent is concise enough to invoke, execute, and maintain reliably.
 
-- Stop when the task is complete
-- Stop when blocked by missing input or unavailable tools
-- Stop after a bounded number of attempts or cycles
-- Report unresolved blockers instead of continuing indefinitely
+Also check whether detail is useful rather than bloated:
+
+* Instructions avoid unnecessary repetition
+* Examples are included only when they materially improve execution
+* Meta-frameworks are avoided unless they clarify behavior
+* Style guidance does not crowd out operational instructions
+* Details that protect loadability, compatibility, execution order, stop conditions, or blocker handling are preserved
+* Overly verbose wording is flagged only when it reduces usability or maintainability
+
 
 ## Severity Rules
 
-Critical findings block loading or execution.
+### Critical
+
+Report as critical when the issue blocks loading or execution.
 
 Examples:
 
@@ -126,7 +133,9 @@ Examples:
 - Required unavailable tools, commands, hooks, plugins, or agents
 - Subagent cannot be located from the provided input
 
-Major findings significantly reduce usefulness or compatibility.
+### Major
+
+Report as major when the issue significantly reduce usefulness or compatibility.
 
 Examples:
 
@@ -137,8 +146,19 @@ Examples:
 - Runtime assumptions are unclear or unsupported
 - Claude Code assumptions would mislead Codex users
 - Stop conditions are missing, vague, or unsafe for the subagent's role
+- Instructions are overly verbose, repetitive, or framework-heavy enough to reduce usability
 
-Minor findings affect clarity, maintainability, or polish without blocking loadability, triggering, or execution.
+### Minor
+
+Report minor findings only when the issue affects clarity, maintainability, or polish without blocking loadability, triggering, or execution.
+
+Examples:
+- Wording is more verbose than necessary but does not harm execution
+- Formatting or heading structure is inconsistent
+- Naming could be clearer but is not misleading
+- Examples are useful but incomplete or slightly redundant
+- Organization could be easier to scan
+- Non-critical output formatting could be more consistent
 
 Do not over-report style issues.
 
