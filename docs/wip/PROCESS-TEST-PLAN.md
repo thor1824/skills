@@ -2,9 +2,9 @@
 
 ## Scope
 
-The system under test is the end-to-end skill chain described in [PROCESS.md](skills/PROCESS.md): `/prepare-repo` -> optional `/grill-with-docs` -> `/to-prd` -> `/to-issues` -> `/triage` -> implementation handoff.
+The system under test is the end-to-end skill chain described in [PROCESS.md](../../skills/PROCESS.md): `/prepare-repo` -> optional `/grill-with-docs` -> `/to-prd` -> `/to-issues` -> `/triage` -> implementation handoff.
 
-The key behavior is not "did a skill run", but "did each producer emit the exact artifacts and fields the next consumer needs" per the handoff rules in [PROCESS.md](skills/PROCESS.md).
+The key behavior is not "did a skill run", but "did each producer emit the exact artifacts and fields the next consumer needs" per the handoff rules in [PROCESS.md](../../skills/PROCESS.md).
 
 This plan combines:
 
@@ -92,7 +92,7 @@ Assert status changes and `.out-of-scope/` receives a record.
 ## Acceptance Criteria For The Test Plan
 
 - Every skill output is verified only through filesystem artifacts and markdown content
-- Every adjacent handoff in [PROCESS.md](skills/PROCESS.md) has at least one positive and one negative test
+- Every adjacent handoff in [PROCESS.md](../../skills/PROCESS.md) has at least one positive and one negative test
 - Status semantics are tested separately for `type: PRD` and `type: Issue`, including the rule that open PRDs have no `status`
 - At least 2 full-chain tests exist: one golden path, one rejection/failure path
 - No test depends on internal prompt wording
