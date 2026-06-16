@@ -92,6 +92,27 @@ Flag issues such as:
 - Instructions that depend on hidden context or undeclared project state
 - Output format missing when the subagent is intended for repeated review loops
 
+## Stop Condition Checks
+
+Report a major finding when the reviewed subagent lacks clear stop conditions for its role.
+
+Check whether the subagent says when to stop, return control, or report blockers.
+
+For reviewer-style subagents, clear stop conditions should usually say:
+
+- Return one review report and stop
+- Do not edit files
+- Do not start a fix loop
+- Do not re-review unless invoked again
+- Report insufficient input as `Not verified` or a blocker, then stop
+
+For fixer, improver, or orchestrator subagents, clear stop conditions should usually say:
+
+- Stop when the task is complete
+- Stop when blocked by missing input or unavailable tools
+- Stop after a bounded number of attempts or cycles
+- Report unresolved blockers instead of continuing indefinitely
+
 ## Severity Rules
 
 Critical findings block loading or execution.
@@ -115,6 +136,7 @@ Examples:
 - Output format is absent for reviewer/orchestrator agents
 - Runtime assumptions are unclear or unsupported
 - Claude Code assumptions would mislead Codex users
+- Stop conditions are missing, vague, or unsafe for the subagent's role
 
 Minor findings affect clarity, maintainability, or polish without blocking loadability, triggering, or execution.
 
@@ -164,4 +186,9 @@ For each finding include:
 - Issue
 - Impact
 - Suggested fix
+
+## Stop Conditions
+
+Stop after returning the review report.
+If the input is insufficient, report what is missing under `Not verified` or as a blocker, then stop.
 """

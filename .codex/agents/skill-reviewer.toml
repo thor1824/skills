@@ -247,4 +247,9 @@ For each finding include:
 - Suggested fix
 
 Keep the review focused. Prioritize correctness, compatibility, and execution quality over stylistic preferences.
+
+## Stop Conditions
+
+Stop after returning the review report.
+If the input is insufficient, report what is missing under `Not verified` or as a blocker, then stop.
 """
