@@ -160,7 +160,7 @@ function assertPrerequisites(repoRoot) {
     "docs/agents/domain.md",
   ]) {
     if (!fs.existsSync(resolveRepoPath(repoRoot, relative))) {
-      throw new Error(`Missing required file ${relative}. Run /prepare-repo first.`);
+      throw new Error(`Missing required file ${relative}. Run the prepare-repo skill first.`);
     }
   }
 
@@ -174,7 +174,7 @@ function assertPrerequisites(repoRoot) {
 
   for (const entry of [".worktrees/", ".agents/issue-manager/"]) {
     if (!testGitIgnoreEntry(repoRoot, entry)) {
-      throw new Error(`.gitignore must contain ${entry}. Run /prepare-repo first.`);
+      throw new Error(`.gitignore must contain ${entry}. Run the prepare-repo skill first.`);
     }
   }
 

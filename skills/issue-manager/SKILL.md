@@ -1,6 +1,6 @@
 ---
 name: issue-manager
-description: Orchestrate ready local-markdown issues through deterministic claim, worker worktree preparation, worker completion, and serialized merge using an ESM Node manager plus the dedicated `issue_manager_worker` agent. Use when the user wants to run the AFK implementation loop, inspect manager status, or inspect leftover manager artifacts.
+description: Orchestrate ready local-markdown issues through deterministic claim, worker worktree preparation, worker completion, and serialized merge using an ESM Node manager plus the installed `issue_manager_worker` subagent. Requires `node`, `git`, `git worktree`, and Codex `multi_agent_v1.spawn_agent`/`wait_agent`/`close_agent` support. Use when the user wants to run the AFK implementation loop, inspect manager status, or inspect leftover manager artifacts.
 disable-model-invocation: true
 ---
 
@@ -8,14 +8,22 @@ disable-model-invocation: true
 
 Run the deterministic issue-manager workflow for the repo's local markdown tracker.
 
-This skill assumes `/prepare-repo` has already established:
+This skill requires:
+
+- `node` on `PATH`
+- `git` on `PATH`
+- `git worktree` support
+- a Codex runtime that exposes synchronous `multi_agent_v1.spawn_agent`, `multi_agent_v1.wait_agent`, and `multi_agent_v1.close_agent`
+- the installed `issue_manager_worker` subagent
+
+This skill also assumes the `prepare-repo` skill has already established:
 
 - `docs/agents/issue-tracker.md`
 - `docs/agents/triage-labels.md`
 - `docs/agents/domain.md`
 - `.gitignore` entries for `.worktrees/` and `.agents/issue-manager/`
 
-If those prerequisites are missing, stop and tell the maintainer to run `/prepare-repo` first.
+If those repo prerequisites are missing, stop and tell the maintainer to run the `prepare-repo` skill first.
 
 ## Commands
 
@@ -23,7 +31,7 @@ Normalize the user's request to one of these internal subcommands:
 
 - `run` - default when the maintainer asks to run the manager or does not specify a subcommand
 - `status` - read-only orchestration summary
-- `cleanup` - read-only leftover-artifact summary with manual cleanup guidance
+- `cleanup` - read-only alias of `status`, interpreted as a leftover-artifact summary with manual cleanup guidance
 
 Natural-language examples that map to `run`:
 
@@ -53,6 +61,8 @@ Examples that map to `cleanup`:
 
 For `status` or `cleanup`:
 
+`cleanup` uses the same script path and payload shape as `status`. The difference is presentation emphasis: summarize leftovers and recovery guidance first.
+
 1. Run:
 
    ```sh
@@ -72,7 +82,7 @@ For `status` or `cleanup`:
 
 ## Run flow
 
-For `run`, act as the thin wrapper around `manager.mjs` and the `issue_manager_worker` agent.
+For `run`, act as the thin wrapper around `manager.mjs` and the installed `issue_manager_worker` subagent.
 
 ### 1. Claim or stop
 
@@ -97,13 +107,31 @@ When `claimed` is returned, report a concise preflight summary before launching 
 - existing `ready-for-human` issue count
 - claimed issue path
 
-### 2. Spawn the worker
+### 2. Invoke the worker
 
-Spawn the named agent `issue_manager_worker`:
+Invoke the installed `issue_manager_worker` subagent with the Codex multi-agent tools:
 
-- `fork_context: false`
-- one initial prompt only
-- no follow-up messages
+1. Start the worker with `multi_agent_v1.spawn_agent` using:
+   - `agent_type: "default"`
+   - `fork_context: false`
+   - a single `items` entry of type `skill` that points at `agents/issue-manager-worker.toml`
+   - the minimal assignment prompt below as the initial `message`
+2. Wait for completion with `multi_agent_v1.wait_agent`.
+3. If the worker exceeds the timeout, close it with `multi_agent_v1.close_agent`.
+
+Pass only the four assigned runtime values below. Do not add extra conversational context.
+
+If `multi_agent_v1.spawn_agent` is unavailable, stop and report:
+
+```text
+Blocked: the issue_manager_worker subagent is not available.
+```
+
+If the current Codex runtime cannot wait for the worker with `multi_agent_v1.wait_agent`, stop and report:
+
+```text
+Blocked: the current Codex runtime cannot synchronously wait for issue_manager_worker completion.
+```
 
 Use a minimal prompt that passes only the four assigned runtime values:
 
@@ -114,13 +142,13 @@ Assigned branch name: <branch name>
 Assigned report file path: <report file path>
 ```
 
-Do not add extra conversational context.
-
 ### 3. Wait policy
 
-- Wait for the worker to finish for up to 30 minutes.
-- If the worker times out, close the subagent.
-- If the worker fails, is interrupted, or times out, still continue to Step 4 exactly once. The repo state remains the authoritative completion check.
+- Wait for the worker to finish for up to 30 minutes with `multi_agent_v1.wait_agent`.
+- Only continue after the worker has definitely exited.
+- If the wait times out, close the worker with `multi_agent_v1.close_agent`, then continue only after the close call confirms the worker is no longer running.
+- If the runtime cannot prove the worker has exited, stop as blocked and do not run `complete`.
+- If the worker exits with failure or is interrupted after it has definitely exited, still continue to Step 4 exactly once. The repo state remains the authoritative completion check.
 
 ### 4. Complete the claimed issue
 
