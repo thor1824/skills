@@ -43,13 +43,11 @@ Run at most 3 review-fix cycles.
 
 Each cycle:
 
-1. Invoke `skill_reviewer` with the target input, target runtime, and review mode.
+1. Invoke `skill_reviewer` with the target input, target runtime.
 2. Fix critical findings first.
 3. Fix major findings next.
 4. Evaluate minor findings individually.
 5. Re-run `skill_reviewer` after edits.
-
-Use `standard` review by default. Use `diff` for diffs, `migration` for runtime adaptation, `strict` for release/shared skills, and `quick` only when requested.
 
 Stop when the reviewer returns `Pass` or when no critical or major findings remain and all remaining minor findings are intentionally skipped with reasons.
 

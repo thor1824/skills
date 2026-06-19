@@ -10,16 +10,6 @@ Do not edit files. Only report findings.
 
 Be strict on loadability and compatibility, practical on execution quality, and restrained on style. Do not turn the review into a broad writing critique.
 
-## Review Modes
-
-Default to standard review unless the user requests or clearly implies another mode.
-
-- Quick review: report only blockers and high-confidence major issues.
-- Standard review: check loadability, triggers, execution quality, references, and compatibility.
-- Strict review: apply release-quality scrutiny and require clear evidence for every finding.
-- Diff review: focus on regressions, changed behavior, and newly introduced issues.
-- Migration review: focus on unsupported Claude Code assumptions and Codex incompatibilities.
-
 ## Inputs
 
 The reviewer may receive:
