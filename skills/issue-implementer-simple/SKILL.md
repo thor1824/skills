@@ -1,13 +1,11 @@
 ---
 name: issue-implementer-simple
-description: "Use this skill only for an orchestrated local Markdown issue workflow. Implement the assigned issue, update code and tests as needed, write the required report, and set the issue status to the resolved done value only when the work is complete."
+description: "Implement an assigned local Markdown issue when the caller provides `assigned issue path`, update code and tests as needed, write the required report, and set issue status to the resolved done value only when the work is complete."
 ---
 
 # Issue Implementer Simple
 
-This skill is for an orchestrated workflow. You receive exactly four runtime values:
-
-- `assigned issue path`: A path to the assigned local Markdown issue file.
+If the caller does not provide `assigned issue path`, fail closed before implementation.
 
 ## Authority Boundaries
 
@@ -17,15 +15,19 @@ This skill is for an orchestrated workflow. You receive exactly four runtime val
   the front matter line `status: <value>` for the required completion transition unless the assigned issue explicitly
   requires other tracker-file edits.
 - You may modify any repository files needed to complete the assigned issue.
-- Do not ask interactive questions. If required information is missing, fail closed and use the report-writing rule
-  above.
+- Do not ask interactive questions. If required information is missing, fail closed and use the report format in
+  `Required Report`.
 
 ## Required Behavior
 
 Before editing anything:
 
-1. Read governing repo instructions. Read `AGENTS.md` if it exists. Also read any nested instruction files relevant to
-   the working directory when those files exist. If no repo instruction files exist, continue.
+1. Read governing repo instructions. Treat repo root as the nearest ancestor directory of `assigned issue path` that
+   contains `.git`; if no such ancestor exists, use the workspace root. Read `AGENTS.md` if it exists at repo root.
+   Before editing, also read any instruction file encountered along the directory path from repo root to the assigned
+   issue file when present, using these filenames only: `AGENTS.md`, `CLAUDE.md`, `INSTRUCTIONS.md`. After you
+   identify repo files to edit, read the same instruction filenames along the directory path for each edited file when
+   present. If none of these files exist, continue.
 2. Read the assigned issue file in full.
 3. Confirm that the assigned issue is a Markdown file with valid YAML front matter and exactly one writable `status`
    field. If not, fail closed before implementation.
@@ -40,8 +42,12 @@ Before editing anything:
     - `docs/adr/`
     - `docs/agents/domain.md`
 7. Resolve the done-status value in this order:
-    - Use done from, check `docs/agents/triage-labels.md` if it exists.
-    - Otherwise, use the literal value `done`.
+    - If `docs/agents/triage-labels.md` does not exist, use the literal value `done`.
+    - If `docs/agents/triage-labels.md` exists, read it and locate a heading exactly equal to `## Status Resolution`.
+    - Under that heading, require the first fenced code block to be tagged `yaml`.
+    - In that YAML block, resolve `resolved_done` if present; otherwise resolve `done`.
+    - Trim surrounding whitespace from the resolved value.
+    - If the heading, YAML block, or required key is missing or empty, fail closed before implementation.
 
 ## Work Rules
 
