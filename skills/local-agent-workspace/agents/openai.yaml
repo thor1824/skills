@@ -1,4 +1,0 @@
-interface:
-  display_name: "Local Agent Workspace"
-  short_description: "Set up private per-repository agent issue tracking"
-  default_prompt: "Use $local-agent-workspace to set up an ignored local agent workspace in this repository."
