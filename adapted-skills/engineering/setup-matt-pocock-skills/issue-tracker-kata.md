@@ -1,3 +1,45 @@
+# Tracker provider: Kata
+
+Always offer **Kata** as an additional issue-tracker choice, even when its MCP connector is unavailable. Do not select it automatically. Describe it as: issues live in the single project exposed by the Kata MCP connector; setup binds the repo, requires native Codex hooks, and uses typed MCP tools for issue operations.
+
+## Setup procedure
+
+Follow this procedure only when the user selects Kata:
+
+1. Load Kata's project and issue-discovery MCP tools. Require exactly one project in the connector's fixed startup scope and record its exact name. Stop on zero or multiple projects; do not guess, create a project, or change connector scope.
+2. Query the scoped project's labels before generating the contract. These are labels already used on issues, not a registry of allowed values.
+3. If the `triage` skill is installed, resolve its five-role mapping before continuing:
+   - Match exact canonical labels automatically: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`.
+   - Default a missing role to its canonical name; absence does not make a label invalid.
+   - Suggest a noncanonical existing label only when its meaning clearly matches a role.
+   - Ask the normal single confirmation question for the complete mapping and preserve existing confirmed overrides on reruns.
+4. Inspect the existing repository binding and native hooks using the verification rules below. A binding to another project is a conflict: stop without proposing `--replace` or `--reassign`. If everything is already valid, report that and ask whether the user wants to skip initialization or rerun its idempotent setup. Otherwise, show this exact command with the resolved name and ask the user to run it:
+
+   ```sh
+   kata init --project <exact-project-name> --with-codex-hooks
+   ```
+
+   Wait for confirmation. Do not run it for them. When initialization is already valid, rerun it only if the user chooses.
+5. Verify without exposing unrelated configuration:
+   - Root `.kata.toml` is a regular, non-symlink TOML file with `version = 1` and `[project].name` equal to the MCP project.
+   - `.gitignore` contains the `.kata.local.toml` entry.
+   - `.codex/hooks.json` is a regular, non-symlink JSON file. Under `hooks.SessionStart`, it contains exactly one `startup|resume|clear` group whose command is `kata attention-hook start --source kata-agent-hook-start`, and exactly one `startup|resume|clear|compact` group whose command is `kata agent-contract-hook --source kata-agent-contract-hook`. Each handler has a 10-second timeout and its Windows command counterpart. Preserve unrelated hooks.
+
+   If initialization was required and any check still fails, stop and explain the incomplete setup instead of editing around it.
+6. Run `kata quickstart --format contract`. This and the user-run initialization are the only CLI uses. Capture stdout verbatim; if the command fails or returns no contract, stop instead of inventing one.
+7. Build `docs/agents/issue-tracker.md` from the content between the generated-template markers below. Replace every `{{KATA_PROJECT}}` placeholder with the exact MCP project and replace `{{KATA_QUICKSTART_CONTRACT}}` with the captured output. Keep the contract output verbatim: do not rewrite its CLI examples.
+8. Include the generated tracker file in the setup preview and obtain confirmation before writing it. The captured contract governs workflow and safety; the preceding adapter governs execution. All issue operations use MCP despite the contract's CLI syntax.
+
+## Reruns
+
+Treat an existing generated tracker guide as the baseline. Preserve user-authored content outside the managed adapter and contract markers. Refresh only those two marked sections. If a guide predates the markers, show a proposed migration and require confirmation before replacing any content. Preserve unrelated hook configuration and confirmed triage-label overrides.
+
+## Generated file template
+
+Copy only the content inside these outer markers; do not copy the provider setup instructions above.
+
+<!-- BEGIN KATA GENERATED FILE -->
+
 # Issue tracker: Kata
 
 Issues and specs for this repo live in the Kata project `{{KATA_PROJECT}}`.
@@ -78,3 +120,5 @@ The following output was captured verbatim during setup with `kata quickstart --
 <!-- BEGIN KATA CANONICAL CONTRACT -->
 {{KATA_QUICKSTART_CONTRACT}}
 <!-- END KATA CANONICAL CONTRACT -->
+
+<!-- END KATA GENERATED FILE -->
