@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 
 const WORKSPACE_DIR = ".agent-workspaces";
 const OVERLAY_DIR = "overlay";
+const SKILLS_DIR = ".agents/skills";
 const SOURCES_DIR = "sources";
 const EXTEND_FILE = "AGENTS.extend.md";
 const MANIFEST_FILE = "manifest.json";
@@ -230,7 +231,8 @@ function scanOverlay(root) {
       validateRelativePath(relative);
       const absolute = path.join(directory, entry.name);
       if (relative === IGNORE_FILE || ignoredByPatterns(relative, entry.isDirectory(), ignorePatterns)) continue;
-      if (entry.isDirectory()) visit(absolute, relative);
+      if (entry.isDirectory() && prefix === SKILLS_DIR) files.push(relative);
+      else if (entry.isDirectory()) visit(absolute, relative);
       else if (entry.isFile()) files.push(relative);
       else if (entry.isSymbolicLink()) {
         let target;
@@ -245,8 +247,8 @@ function scanOverlay(root) {
   return files.sort();
 }
 
-function tracked(repoRoot, relative) {
-  return runGit(repoRoot, ["ls-files", "--error-unmatch", "--", relative], { allowFailure: true }).status === 0;
+function trackedAtOrBelow(repoRoot, relative) {
+  return runGit(repoRoot, ["ls-files", "--", `:(literal)${relative}`]).stdout.trim().length > 0;
 }
 
 function managedBlock(files) {
@@ -338,7 +340,7 @@ function update(cwd) {
   assertWorkspace(paths);
   const previous = readManifest(paths.manifest).files;
   const files = scanOverlay(paths.overlay);
-  const conflicts = files.filter((file) => tracked(repo.currentRoot, file));
+  const conflicts = files.filter((file) => trackedAtOrBelow(repo.currentRoot, file));
   if (conflicts.length) throw new OverlayError(`Overlay paths conflict with tracked repository files:\n${conflicts.map((file) => `  ${file}`).join("\n")}`);
   const before = new Set(previous);
   const after = new Set(files);
@@ -350,12 +352,12 @@ function update(cwd) {
   const excludeChanged = !exists(paths.exclude) || fs.readFileSync(paths.exclude, "utf8") !== nextExclude;
   if (excludeChanged) atomicWrite(paths.exclude, nextExclude);
   if (manifestChanged) atomicWrite(paths.manifest, nextManifest);
-  if (!manifestChanged && !excludeChanged) console.log(`Workspace overlay already up to date.\n\n${files.length} overlay files\n0 added\n0 removed\n0 conflicts`);
+  if (!manifestChanged && !excludeChanged) console.log(`Workspace overlay already up to date.\n\n${files.length} overlay entries\n0 added\n0 removed\n0 conflicts`);
   else {
     console.log("Workspace overlay updated.");
     if (added.length) console.log(`\nAdded:\n${added.map((file) => `  ${file}`).join("\n")}`);
     if (removed.length) console.log(`\nRemoved:\n${removed.map((file) => `  ${file}`).join("\n")}`);
-    console.log(`\nCurrent overlay:\n  ${files.length} files\n\nGit exclusions updated.`);
+    console.log(`\nCurrent overlay:\n  ${files.length} entries\n\nGit exclusions updated.`);
   }
   return 0;
 }
@@ -370,9 +372,28 @@ function overlayOwnedLink(link, relative) {
   return resolveLink(link).endsWith(`${path.sep}${suffix}`);
 }
 
+function isSkillDirectory(relative) {
+  const name = relative.startsWith(`${SKILLS_DIR}/`) ? relative.slice(SKILLS_DIR.length + 1) : "";
+  return name.length > 0 && !name.includes("/");
+}
+
+function replaceableLegacySkillDirectory(directory, sourceDirectory) {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const child = path.join(directory, entry.name);
+    const childSource = path.join(sourceDirectory, entry.name);
+    if (entry.isDirectory()) {
+      if (!replaceableLegacySkillDirectory(child, childSource)) return false;
+    } else if (!entry.isSymbolicLink() || resolveLink(child) !== childSource) return false;
+  }
+  return true;
+}
+
 function inspectDestination(destination, source, relative) {
   if (!exists(destination)) return { kind: "missing" };
   const stat = fs.lstatSync(destination);
+  if (stat.isDirectory() && isSkillDirectory(relative) && replaceableLegacySkillDirectory(destination, source)) {
+    return { kind: "repairable-directory" };
+  }
   if (!stat.isSymbolicLink()) return { kind: "collision", detail: "a non-symlink entry exists" };
   const actual = resolveLink(destination);
   if (actual === source) return { kind: "linked" };
@@ -428,7 +449,7 @@ function restore(cwd) {
   for (const relative of manifest.files) {
     const source = path.join(paths.overlay, ...relative.split("/"));
     const destination = path.join(repo.currentRoot, ...relative.split("/"));
-    if (tracked(repo.currentRoot, relative)) { counts.conflicts += 1; details.push(`TRACKED  ${relative}`); continue; }
+    if (trackedAtOrBelow(repo.currentRoot, relative)) { counts.conflicts += 1; details.push(`TRACKED  ${relative}`); continue; }
     if (!exists(source)) { counts.conflicts += 1; details.push(`NO SOURCE  ${relative}`); continue; }
     const parentProblem = assertSafeParents(repo.currentRoot, relative, true);
     if (parentProblem) { counts.conflicts += 1; details.push(`UNSAFE PARENT  ${relative}`); continue; }
@@ -436,6 +457,7 @@ function restore(cwd) {
     if (state.kind === "missing") { fs.symlinkSync(source, destination); counts.created += 1; }
     else if (state.kind === "linked") counts.unchanged += 1;
     else if (state.kind === "repairable") { fs.unlinkSync(destination); fs.symlinkSync(source, destination); counts.repaired += 1; }
+    else if (state.kind === "repairable-directory") { fs.rmSync(destination, { recursive: true }); fs.symlinkSync(source, destination); counts.repaired += 1; }
     else { counts.conflicts += 1; details.push(`CONFLICT  ${relative}${state.actual ? ` -> ${state.actual}` : ""}`); }
   }
   writeOverride(paths.override, renderOverride(repo, paths));
@@ -474,7 +496,7 @@ function status(cwd) {
     const source = path.join(paths.overlay, ...relative.split("/"));
     const destination = path.join(repo.currentRoot, ...relative.split("/"));
     let state;
-    if (tracked(repo.currentRoot, relative)) state = "TRACKED";
+    if (trackedAtOrBelow(repo.currentRoot, relative)) state = "TRACKED";
     else if (!exists(source)) state = "NO SOURCE";
     else if (assertSafeParents(repo.currentRoot, relative, false)?.kind === "unsafe-parent") state = "UNSAFE";
     else state = inspectDestination(destination, source, relative).kind.toUpperCase();
@@ -494,7 +516,7 @@ function status(cwd) {
   const label = exitCode === 0 ? "healthy" : exitCode === 1 ? "restore required" : exitCode === 2 ? "update required" : "conflict or invalid configuration";
   console.log(`Workspace overlay status\n\nRepository:\n  ${repo.mainRoot}\n\nCurrent worktree:\n  ${repo.currentRoot}\n\nMain worktree:\n  ${repo.mainRoot}`);
   console.log(`\nWorkspace:\n  ${invalid.length ? "INVALID" : "OK"}`);
-  console.log(`\nManifest:\n  ${updateNeeded.length ? "OUT OF DATE" : manifest ? "OK" : "INVALID"}${manifest ? `\n  ${manifest.files.length} files` : ""}`);
+  console.log(`\nManifest:\n  ${updateNeeded.length ? "OUT OF DATE" : manifest ? "OK" : "INVALID"}${manifest ? `\n  ${manifest.files.length} entries` : ""}`);
   console.log(`\nGit exclusions:\n  ${exclusions}`);
   console.log(`\nStatic overlay:${rows.length ? `\n${rows.map((row) => `  ${row}`).join("\n")}` : "\n  0 files"}`);
   console.log(`\nAGENTS.override.md:\n  ${override}\n\nStatus:\n  ${label}`);

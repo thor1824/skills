@@ -125,6 +125,73 @@ test(".awsoignore keeps matching overlay files out of worktrees", (t) => {
   for (const relative of manifest.files) assert.equal(fs.lstatSync(path.join(linked, relative)).isSymbolicLink(), true);
 });
 
+test("skills are restored as directory symlinks and legacy file links are migrated", (t) => {
+  const { main } = fixture(t);
+  assert.equal(invoke(main, "setup").status, 0);
+  const overlay = path.join(main, ".agent-workspaces", "overlay");
+  const skill = path.join(overlay, ".agents", "skills", "demo");
+  fs.mkdirSync(path.join(skill, "references"), { recursive: true });
+  fs.writeFileSync(path.join(skill, "SKILL.md"), "# Demo\n");
+  fs.writeFileSync(path.join(skill, "references", "notes.md"), "Notes\n");
+  fs.writeFileSync(path.join(overlay, ".agents", "skills", "skill-lock.json"), "{}\n");
+  fs.writeFileSync(path.join(overlay, ".awsoignore"), "skill-lock.json\n");
+
+  const manifestFile = path.join(main, ".agent-workspaces", "manifest.json");
+  fs.writeFileSync(manifestFile, `${JSON.stringify({
+    version: 1,
+    files: [".agents/skills/demo/SKILL.md", ".agents/skills/demo/references/notes.md"],
+  }, null, 2)}\n`);
+  assert.equal(invoke(main, "restore").status, 0);
+  const destination = path.join(main, ".agents", "skills", "demo");
+  assert.equal(fs.lstatSync(destination).isDirectory(), true);
+  assert.equal(fs.lstatSync(path.join(destination, "SKILL.md")).isSymbolicLink(), true);
+
+  const updated = invoke(main, "update");
+  assert.equal(updated.status, 0, updated.stderr);
+  assert.deepEqual(JSON.parse(fs.readFileSync(manifestFile)).files, [".agents/skills/demo"]);
+  const restored = invoke(main, "restore");
+  assert.equal(restored.status, 0, restored.stderr);
+  assert.equal(fs.lstatSync(destination).isSymbolicLink(), true);
+  assert.equal(fs.realpathSync(destination), skill);
+  assert.equal(fs.readFileSync(path.join(destination, "references", "notes.md"), "utf8"), "Notes\n");
+  assert.equal(fs.existsSync(path.join(main, ".agents", "skills", "skill-lock.json")), false);
+  assert.equal(invoke(main, "status").status, 0);
+});
+
+test("restore does not replace a foreign skill directory", (t) => {
+  const { main } = fixture(t);
+  assert.equal(invoke(main, "setup").status, 0);
+  const skill = path.join(main, ".agent-workspaces", "overlay", ".agents", "skills", "demo");
+  fs.mkdirSync(skill, { recursive: true });
+  fs.writeFileSync(path.join(skill, "SKILL.md"), "# Demo\n");
+  assert.equal(invoke(main, "update").status, 0);
+
+  const destination = path.join(main, ".agents", "skills", "demo");
+  fs.mkdirSync(destination, { recursive: true });
+  fs.writeFileSync(path.join(destination, "mine.txt"), "mine\n");
+  const restored = invoke(main, "restore");
+  assert.equal(restored.status, 3);
+  assert.equal(fs.readFileSync(path.join(destination, "mine.txt"), "utf8"), "mine\n");
+});
+
+test("update rejects tracked files beneath a skill directory", (t) => {
+  const { main } = fixture(t);
+  assert.equal(invoke(main, "setup").status, 0);
+  const overlaySkill = path.join(main, ".agent-workspaces", "overlay", ".agents", "skills", "demo");
+  fs.mkdirSync(overlaySkill, { recursive: true });
+  fs.writeFileSync(path.join(overlaySkill, "SKILL.md"), "# Personal demo\n");
+  const trackedSkill = path.join(main, ".agents", "skills", "demo");
+  fs.mkdirSync(trackedSkill, { recursive: true });
+  fs.writeFileSync(path.join(trackedSkill, "README.md"), "Repository skill\n");
+  git(main, "add", ".agents/skills/demo/README.md");
+  git(main, "commit", "-m", "track repository skill");
+
+  const result = invoke(main, "update");
+  assert.equal(result.status, 3);
+  assert.match(result.stderr, /tracked repository files/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(main, ".agent-workspaces", "manifest.json"))).files, []);
+});
+
 test("update inventories files and restore hydrates linked worktrees", (t) => {
   const { parent, main } = fixture(t);
   assert.equal(invoke(main, "setup").status, 0);

@@ -2,7 +2,7 @@
 
 The awso system provides a way to maintain personal, repository-specific agent configuration without committing that configuration to the repository.
 
-It uses a hidden `.agent-workspaces/` directory in the main Git worktree as the canonical store for personal configuration. Static files such as Codex hooks are symlinked into every worktree at their expected repository-relative paths. Worktree-dependent files such as `AGENTS.override.md` are generated separately inside each worktree so they can incorporate that worktree's current tracked `AGENTS.md`.
+It uses a hidden `.agent-workspaces/` directory in the main Git worktree as the canonical store for personal configuration. Static entries such as Codex hooks and skill directories are symlinked into every worktree at their expected repository-relative paths. Worktree-dependent files such as `AGENTS.override.md` are generated separately inside each worktree so they can incorporate that worktree's current tracked `AGENTS.md`.
 
 The CLI exposes five operations:
 
@@ -260,7 +260,9 @@ represents:
 
 ## Manifest
 
-The manifest should inventory materialized files, not every parent directory.
+The manifest should inventory materialized entries, not every parent directory.
+Entries are normally individual files. Each immediate child directory beneath
+`.agents/skills/` is the exception and is inventoried as one directory entry.
 
 For example:
 
@@ -300,9 +302,9 @@ the restore command can create:
 
 automatically.
 
-## Why individual files are inventoried
+## File entries and the skill-directory exception
 
-Workspace-overlay should generally symlink individual files rather than entire parent directories.
+AWSO should generally symlink individual files rather than entire parent directories.
 
 For example:
 
@@ -318,6 +320,20 @@ can coexist safely if only:
 ```text
 .codex/hooks/before-test
 ```
+
+Skills use directory-level links instead:
+
+```text
+.agents/skills/example
+  -> .agent-workspaces/overlay/.agents/skills/example
+```
+
+The skill name directory is one manifest entry; its internal files are not
+inventoried separately. Files directly beneath `.agents/skills/`, including
+root-level skill lock files, remain ordinary file entries and can be excluded
+with `.awsoignore`. Ignore rules cannot exclude an individual descendant of a
+directory-linked skill because the directory symlink exposes the complete
+skill directory.
 
 is owned by awso.
 
@@ -499,7 +515,7 @@ The command should:
 5. Read and validate `manifest.json`.
 6. Verify every destination is safe.
 7. Create required parent directories.
-8. Create symlinks for every static overlay file.
+8. Create symlinks for every static overlay entry.
 9. Always regenerate the worktree-specific `AGENTS.override.md`, replacing any existing regular file or symlink.
 10. Report restored, unchanged, repaired, and conflicting paths.
 

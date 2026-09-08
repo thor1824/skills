@@ -64,6 +64,24 @@ awso status
 Run `awso restore` once in each additional worktree. Run `awso update` after
 adding, removing, or renaming files beneath `.agent-workspaces/overlay/`.
 
+## Skill directories
+
+Each immediate directory beneath `.agents/skills/` is treated as one overlay
+entry. For example, AWSO links:
+
+```text
+<worktree>/.agents/skills/example
+  -> <main-worktree>/.agent-workspaces/overlay/.agents/skills/example
+```
+
+It does not create separate links for `SKILL.md`, references, scripts, or other
+files inside that skill. Existing legacy skill directories containing only
+AWSO-owned file links are migrated automatically. A directory containing any
+foreign entry remains a conflict and is not replaced.
+
+Files directly beneath `.agents/skills/` are still handled individually, so a
+root-level skill lock can remain overlay-only through `.awsoignore`.
+
 ## Ignoring overlay files
 
 `awso setup` creates `.agent-workspaces/overlay/.awsoignore`. Use it for files
@@ -72,8 +90,8 @@ For example:
 
 ```gitignore
 # Keep generated skill locks in the overlay only
-skill-lock.json
-**/skill-lock.yaml
+/.agents/skills/skill-lock.json
+/.agents/skills/skill-lock.yaml
 ```
 
 The syntax follows familiar `.gitignore` conventions: blank lines and comments
@@ -85,6 +103,10 @@ wins.
 The root `.awsoignore` is never added to the manifest or linked into a
 worktree. After changing its rules, run `awso update`; `awso status` reports an
 out-of-date manifest until you do.
+
+Because a skill directory is linked as a single unit, ignore rules cannot hide
+individual files inside that directory. Keep overlay-only lock files directly
+beneath `.agents/skills/`, beside the skill directories.
 
 ## Commands
 
