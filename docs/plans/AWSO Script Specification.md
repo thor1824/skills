@@ -1,45 +1,46 @@
-# Workspace Overlay
+# AWSO
 
-The workspace-overlay system provides a way to maintain personal, repository-specific agent configuration without committing that configuration to the repository.
+The awso system provides a way to maintain personal, repository-specific agent configuration without committing that configuration to the repository.
 
 It uses a hidden `.agent-workspaces/` directory in the main Git worktree as the canonical store for personal configuration. Static files such as Codex hooks are symlinked into every worktree at their expected repository-relative paths. Worktree-dependent files such as `AGENTS.override.md` are generated separately inside each worktree so they can incorporate that worktree's current tracked `AGENTS.md`.
 
 The CLI exposes four primary operations:
 
 ```text
-workspace-overlay setup
-workspace-overlay update
-workspace-overlay restore
-workspace-overlay status
+awso setup
+awso update
+awso restore
+awso status
+awso help
 ```
 
 The intended lifecycle is:
 
 ```text
-workspace-overlay setup
+awso setup
           ↓
 edit personal overlay
           ↓
-workspace-overlay update
+awso update
           ↓
 create/switch worktree
           ↓
-workspace-overlay restore
+awso restore
           ↓
-workspace-overlay status
+awso status
 ```
 
 All operations should be safe to run repeatedly.
 
 ---
 
-# 1. `workspace-overlay setup`
+# 1. `awso setup`
 
 ## Purpose
 
-Initializes workspace-overlay support for a Git repository.
+Initializes awso support for a Git repository.
 
-This command establishes the canonical `.agent-workspaces/` directory in the repository's main worktree, creates the initial personal extension file, and configures Git so workspace-overlay artifacts are ignored across all linked worktrees.
+This command establishes the canonical `.agent-workspaces/` directory in the repository's main worktree, creates the initial personal extension file, and configures Git so awso artifacts are ignored across all linked worktrees.
 
 It should normally only need to be run once per repository, but rerunning it must be safe.
 
@@ -50,12 +51,12 @@ The command should:
 1. Verify that the current directory belongs to a Git repository.
 2. Determine the repository's main worktree.
 3. Determine the Git common directory.
-4. Create the workspace-overlay directory structure in the main worktree.
+4. Create the awso directory structure in the main worktree.
 5. Create `AGENTS.extend.md` if it does not already exist.
 6. Create the static overlay directory if it does not already exist.
 7. Create an initial manifest if none exists.
 8. Ensure `.agent-workspaces/` is excluded from Git.
-9. Ensure generated workspace-overlay artifacts such as `AGENTS.override.md` are excluded from Git.
+9. Ensure generated awso artifacts such as `AGENTS.override.md` are excluded from Git.
 10. Never overwrite existing user configuration.
 
 ## Resulting structure
@@ -68,6 +69,7 @@ repo/
 │   ├── sources/
 │   │   └── AGENTS.extend.md
 │   ├── overlay/
+│   │   └── .awsoignore
 │   └── manifest.json
 ├── AGENTS.md
 └── ...
@@ -104,7 +106,7 @@ This file should live under:
 
 rather than directly in the repository root.
 
-It is source material for workspace-overlay rather than an instruction file agents should consume directly.
+It is source material for awso rather than an instruction file agents should consume directly.
 
 ## Git exclusions
 
@@ -130,10 +132,10 @@ are excluded.
 Workspace-overlay should own a clearly marked section:
 
 ```gitignore
-# >>> workspace-overlay
+# >>> awso
 /.agent-workspaces/
 /AGENTS.override.md
-# <<< workspace-overlay
+# <<< awso
 ```
 
 Other contents of `info/exclude` must remain untouched.
@@ -144,12 +146,12 @@ If `.agent-workspaces/` already exists, setup should preserve it.
 
 If `AGENTS.extend.md` already exists, setup should preserve its contents.
 
-If workspace-overlay has already configured `info/exclude`, setup should update or verify the existing managed section rather than creating duplicates.
+If awso has already configured `info/exclude`, setup should update or verify the existing managed section rather than creating duplicates.
 
 Running:
 
 ```text
-workspace-overlay setup
+awso setup
 ```
 
 multiple times should therefore have the same result as running it once.
@@ -174,16 +176,16 @@ Updated Git exclusions.
 
 Next:
   Add personal files under .agent-workspaces/overlay/
-  then run `workspace-overlay update`.
+  then run `awso update`.
 ```
 
 ---
 
-# 2. `workspace-overlay update`
+# 2. `awso update`
 
 ## Purpose
 
-Synchronizes workspace-overlay's metadata with the current contents of:
+Synchronizes awso's metadata with the current contents of:
 
 ```text
 .agent-workspaces/overlay/
@@ -191,7 +193,7 @@ Synchronizes workspace-overlay's metadata with the current contents of:
 
 This command is run whenever the developer adds, removes, or reorganizes personal overlay files.
 
-It determines which repository-relative paths belong to workspace-overlay, writes those paths into the manifest, and updates Git's local exclusion rules accordingly.
+It determines which repository-relative paths belong to awso, writes those paths into the manifest, and updates Git's local exclusion rules accordingly.
 
 It does not restore files into worktrees.
 
@@ -206,7 +208,7 @@ The command should:
 3. Scan the overlay for files and symlinks that should be materialized into worktrees.
 4. Generate a normalized manifest.
 5. Determine the corresponding repository-relative destination paths.
-6. Update the workspace-overlay section of `$GIT_COMMON_DIR/info/exclude`.
+6. Update the awso section of `$GIT_COMMON_DIR/info/exclude`.
 7. Detect conflicts with paths already tracked by Git.
 8. Detect reserved or invalid overlay paths.
 9. Report additions, removals, unchanged files, and conflicts.
@@ -220,6 +222,16 @@ The directory structure inside:
 ```
 
 mirrors where files should appear in a worktree.
+
+The root-level `.awsoignore` controls which overlay entries are not
+materialized. AWSO creates this file during setup, preserves user changes on
+subsequent setup runs, and never includes the file itself in the manifest.
+Patterns use Gitignore-style ordering and matching, including comments,
+negation, root anchoring, directory-only rules, wildcards, and character
+classes. Ignored files may remain in the overlay—for example generated
+`skill-lock.json` files—but are omitted from the manifest, Git exclusions, and
+worktree symlinks. Changing `.awsoignore` makes the manifest stale until
+`awso update` is run.
 
 For example:
 
@@ -307,7 +319,7 @@ can coexist safely if only:
 .codex/hooks/before-test
 ```
 
-is owned by workspace-overlay.
+is owned by awso.
 
 Symlinking the entire `.codex/` directory would make this coexistence difficult or impossible.
 
@@ -327,12 +339,12 @@ From the manifest:
 the managed exclusion block becomes:
 
 ```gitignore
-# >>> workspace-overlay
+# >>> awso
 /.agent-workspaces/
 /AGENTS.override.md
 /.codex/hooks/before-test
 /.my-agent/config.json
-# <<< workspace-overlay
+# <<< awso
 ```
 
 The command should completely regenerate only the managed block.
@@ -343,7 +355,7 @@ Unrelated contents of `info/exclude` must remain untouched.
 
 ## Collision detection
 
-Before accepting an overlay path, `workspace-overlay update` should check whether the corresponding path is tracked by Git.
+Before accepting an overlay path, `awso update` should check whether the corresponding path is tracked by Git.
 
 For example, if the overlay contains:
 
@@ -364,7 +376,7 @@ This should be treated as an error rather than silently allowing the overlay to 
 Example:
 
 ```text
-ERROR: workspace-overlay path conflicts with tracked repository file
+ERROR: awso path conflicts with tracked repository file
 
   .codex/config.toml
 
@@ -375,7 +387,7 @@ The update should fail before writing an invalid manifest.
 
 ## Reserved paths
 
-Some paths belong to workspace-overlay itself and should never be permitted inside the static overlay.
+Some paths belong to awso itself and should never be permitted inside the static overlay.
 
 At minimum:
 
@@ -401,7 +413,7 @@ the update command should reject it.
 Running:
 
 ```text
-workspace-overlay update
+awso update
 ```
 
 without changing the overlay should result in no meaningful changes.
@@ -434,7 +446,7 @@ and the developer adds:
 Running:
 
 ```text
-workspace-overlay update
+awso update
 ```
 
 could report:
@@ -453,7 +465,7 @@ Git exclusions updated.
 
 ---
 
-# 3. `workspace-overlay restore`
+# 3. `awso restore`
 
 ## Purpose
 
@@ -471,7 +483,7 @@ For example:
 git worktree add ../project-feature -b feature
 cd ../project-feature
 
-workspace-overlay restore
+awso restore
 ```
 
 Afterward the new worktree should be ready to use with the developer's normal agent environment.
@@ -500,7 +512,7 @@ Conceptually:
 ```text
 feature-worktree/
        │
-       │ workspace-overlay restore
+       │ awso restore
        ▼
 determine repository
        │
@@ -597,7 +609,7 @@ The generated file should include a clear ownership marker:
 
 ```markdown
 <!--
-GENERATED BY workspace-overlay.
+GENERATED BY awso.
 Do not edit this file directly.
 
 Sources:
@@ -609,7 +621,7 @@ Sources:
 This marker serves two purposes:
 
 1. It tells humans where the file came from.
-2. It allows future `restore` operations to determine whether workspace-overlay owns the existing file.
+2. It allows future `restore` operations to determine whether awso owns the existing file.
 
 ## Missing `AGENTS.md`
 
@@ -650,7 +662,7 @@ missing
 create symlink
 ```
 
-### Correct workspace-overlay symlink already exists
+### Correct awso symlink already exists
 
 Do nothing.
 
@@ -660,7 +672,7 @@ correct symlink
 unchanged
 ```
 
-### Broken workspace-overlay symlink
+### Broken awso symlink
 
 Repair it.
 
@@ -672,7 +684,7 @@ replace with correct symlink
 
 ### Symlink points somewhere else
 
-Do not silently replace it unless workspace-overlay can prove that it owns the link.
+Do not silently replace it unless awso can prove that it owns the link.
 
 Prefer:
 
@@ -709,12 +721,12 @@ Workspace-overlay will not shadow repository-owned files.
 
 ## Generated-file ownership
 
-`AGENTS.override.md` is slightly different because workspace-overlay generates it rather than symlinking it.
+`AGENTS.override.md` is slightly different because awso generates it rather than symlinking it.
 
-If the existing file contains the workspace-overlay generation marker:
+If the existing file contains the awso generation marker:
 
 ```text
-generated by workspace-overlay
+generated by awso
   ↓
 safe to regenerate
 ```
@@ -754,7 +766,7 @@ Restore should be safe to run as often as desired.
 For an already healthy worktree:
 
 ```text
-workspace-overlay restore
+awso restore
 ```
 
 might report:
@@ -776,15 +788,15 @@ Worktree is ready.
 
 ---
 
-# 4. `workspace-overlay status`
+# 4. `awso status`
 
 ## Purpose
 
-Inspects the current workspace-overlay installation without modifying anything.
+Inspects the current awso installation without modifying anything.
 
 This command answers:
 
-> Is workspace-overlay correctly configured, and is this worktree currently hydrated as expected?
+> Is awso correctly configured, and is this worktree currently hydrated as expected?
 
 It should be completely read-only.
 
@@ -795,7 +807,7 @@ This makes it suitable for:
 - agent bootstrap checks,
 - CI-like local validation,
 - verifying a newly created worktree,
-- checking whether `workspace-overlay update` or `workspace-overlay restore` needs to be run.
+- checking whether `awso update` or `awso restore` needs to be run.
 
 ## Responsibilities
 
@@ -810,7 +822,7 @@ The command should:
 7. Compare the manifest with the actual overlay contents.
 8. Verify Git exclusions.
 9. Check every expected symlink in the current worktree.
-10. Check whether `AGENTS.override.md` exists and is workspace-overlay-owned.
+10. Check whether `AGENTS.override.md` exists and is awso-owned.
 11. Detect whether `AGENTS.override.md` is stale.
 12. Detect collisions with Git-tracked paths.
 13. Make no filesystem changes.
@@ -870,7 +882,7 @@ Status:
   restore required
 
 Run:
-  workspace-overlay restore
+  awso restore
 ```
 
 ## Detecting stale metadata
@@ -881,7 +893,7 @@ If files have been added to:
 .agent-workspaces/overlay/
 ```
 
-but `workspace-overlay update` has not been run:
+but `awso update` has not been run:
 
 ```text
 Workspace overlay status
@@ -896,7 +908,7 @@ Status:
   update required
 
 Run:
-  workspace-overlay update
+  awso update
 ```
 
 Likewise, if the manifest references a file that no longer exists:
@@ -909,7 +921,7 @@ Missing overlay sources:
   .codex/hooks/old-hook
 
 Run:
-  workspace-overlay update
+  awso update
 ```
 
 ## Detecting stale `AGENTS.override.md`
@@ -933,7 +945,7 @@ AGENTS.override.md:
 Sources changed since the override was generated.
 
 Run:
-  workspace-overlay restore
+  awso restore
 ```
 
 This is particularly useful after:
@@ -983,7 +995,7 @@ Actual:
 
 ## Exit codes
 
-`workspace-overlay status` is especially useful if it exposes meaningful exit codes.
+`awso status` is especially useful if it exposes meaningful exit codes.
 
 A simple convention could be:
 
@@ -997,14 +1009,14 @@ A simple convention could be:
 This allows scripts to do things such as:
 
 ```text
-workspace-overlay status || workspace-overlay restore
+awso status || awso restore
 ```
 
 More detailed exit codes can be introduced later if necessary, but the initial convention should remain simple.
 
 ## Read-only invariant
 
-`workspace-overlay status` must never:
+`awso status` must never:
 
 - modify `info/exclude`,
 - regenerate the manifest,
@@ -1075,7 +1087,7 @@ Its contents depend on both shared personal configuration and tracked state belo
 ```text
 cd ~/src/project
 
-workspace-overlay setup
+awso setup
 ```
 
 ## Add personal agent instructions
@@ -1100,19 +1112,19 @@ For example:
 Then synchronize the manifest:
 
 ```text
-workspace-overlay update
+awso update
 ```
 
 Restore the current worktree:
 
 ```text
-workspace-overlay restore
+awso restore
 ```
 
 Verify:
 
 ```text
-workspace-overlay status
+awso status
 ```
 
 ## Creating another worktree
@@ -1121,8 +1133,8 @@ workspace-overlay status
 git worktree add ../project-feature -b feature
 cd ../project-feature
 
-workspace-overlay restore
-workspace-overlay status
+awso restore
+awso status
 ```
 
 The resulting architecture is:
@@ -1161,13 +1173,13 @@ The important invariant is:
 
 # Command Summary
 
-## `workspace-overlay setup`
+## `awso setup`
 
-Initializes workspace-overlay for the repository.
+Initializes awso for the repository.
 
 It creates the canonical workspace structure and establishes the base local Git exclusions.
 
-## `workspace-overlay update`
+## `awso update`
 
 Synchronizes the static overlay with the manifest and local Git exclusions.
 
@@ -1177,7 +1189,7 @@ Run this after adding, deleting, renaming, or moving files under:
 .agent-workspaces/overlay/
 ```
 
-## `workspace-overlay restore`
+## `awso restore`
 
 Hydrates the current worktree.
 
@@ -1187,7 +1199,7 @@ It creates symlinks for shared overlay files and generates the worktree-specific
 AGENTS.override.md
 ```
 
-## `workspace-overlay status`
+## `awso status`
 
 Performs a read-only health check.
 
@@ -1204,5 +1216,11 @@ tracked-file collisions
 ```
 
 and tells the user whether `update` or `restore` is required.
+
+## `awso help`
+
+Prints the usage and a concise description of every available command.
+
+It succeeds without requiring the current directory to be inside a Git repository.
 
 Together, the commands provide a repeatable personal configuration layer over any Git worktree without committing developer-specific agent artifacts to the repository.

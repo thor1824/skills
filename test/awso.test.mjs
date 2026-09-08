@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-const cli = path.resolve("scripts/workspace-overlay.mjs");
+const cli = path.resolve("scripts/awso/awso.mjs");
 
 function run(command, args, cwd) {
   const result = spawnSync(command, args, { cwd, encoding: "utf8" });
@@ -24,34 +24,105 @@ function invoke(cwd, command) {
 }
 
 function fixture(t) {
-  const parent = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-overlay-test-"));
+  const parent = fs.mkdtempSync(path.join(os.tmpdir(), "awso-test-"));
   t.after(() => fs.rmSync(parent, { recursive: true, force: true }));
   const main = path.join(parent, "main");
   fs.mkdirSync(main);
   git(main, "init", "-b", "main");
-  git(main, "config", "user.name", "Workspace Overlay Test");
-  git(main, "config", "user.email", "workspace-overlay@example.invalid");
+  git(main, "config", "user.name", "AWSO Test");
+  git(main, "config", "user.email", "awso@example.invalid");
   fs.writeFileSync(path.join(main, "AGENTS.md"), "# Project instructions\n");
   git(main, "add", "AGENTS.md");
   git(main, "commit", "-m", "initial");
   return { parent, main };
 }
 
+test("help describes every command without requiring a repository", () => {
+  const result = invoke(process.cwd(), "help");
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /^Usage: awso <command>/);
+  for (const command of ["setup", "update", "restore", "status", "help"]) {
+    assert.match(result.stdout, new RegExp(`^  ${command}\\s`, "m"));
+  }
+});
+
 test("setup is idempotent and preserves personal instructions", (t) => {
   const { main } = fixture(t);
   const first = invoke(main, "setup");
   assert.equal(first.status, 0, first.stderr);
   const extension = path.join(main, ".agent-workspaces", "sources", "AGENTS.extend.md");
+  const ignoreFile = path.join(main, ".agent-workspaces", "overlay", ".awsoignore");
+  assert.match(fs.readFileSync(ignoreFile, "utf8"), /not linked/);
   fs.writeFileSync(extension, "# Mine\n\n- Keep this.\n");
+  fs.writeFileSync(ignoreFile, "skill-lock.json\n");
 
   const second = invoke(main, "setup");
   assert.equal(second.status, 0, second.stderr);
   assert.equal(fs.readFileSync(extension, "utf8"), "# Mine\n\n- Keep this.\n");
+  assert.equal(fs.readFileSync(ignoreFile, "utf8"), "skill-lock.json\n");
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(main, ".agent-workspaces", "manifest.json"))), { version: 1, files: [] });
   const exclude = fs.readFileSync(path.join(main, ".git", "info", "exclude"), "utf8");
-  assert.equal((exclude.match(/# >>> workspace-overlay/g) || []).length, 1);
+  assert.equal((exclude.match(/# >>> awso/g) || []).length, 1);
   assert.match(exclude, /\/\.agent-workspaces\//);
   assert.match(exclude, /\/AGENTS\.override\.md/);
+});
+
+test(".awsoignore keeps matching overlay files out of worktrees", (t) => {
+  const { parent, main } = fixture(t);
+  assert.equal(invoke(main, "setup").status, 0);
+  const overlay = path.join(main, ".agent-workspaces", "overlay");
+  fs.writeFileSync(path.join(overlay, ".awsoignore"), [
+    "# Local overlay metadata",
+    "skill-lock.json",
+    "**/skill-lock.yaml",
+    "cache/",
+    "*.tmp",
+    "!important.tmp",
+    "draft[0-9].txt",
+    "secret?.txt",
+    "/root-only",
+    "",
+  ].join("\n"));
+  fs.mkdirSync(path.join(overlay, "nested"));
+  fs.mkdirSync(path.join(overlay, "cache"));
+  fs.writeFileSync(path.join(overlay, "skill-lock.json"), "{}\n");
+  fs.writeFileSync(path.join(overlay, "nested", "skill-lock.json"), "{}\n");
+  fs.writeFileSync(path.join(overlay, "nested", "skill-lock.yaml"), "lock: true\n");
+  fs.writeFileSync(path.join(overlay, "cache", "state.json"), "{}\n");
+  fs.writeFileSync(path.join(overlay, "scratch.tmp"), "temporary\n");
+  fs.writeFileSync(path.join(overlay, "important.tmp"), "keep\n");
+  fs.writeFileSync(path.join(overlay, "draft7.txt"), "local\n");
+  fs.writeFileSync(path.join(overlay, "draftx.txt"), "keep\n");
+  fs.writeFileSync(path.join(overlay, "secret1.txt"), "local\n");
+  fs.writeFileSync(path.join(overlay, "secret12.txt"), "keep\n");
+  fs.writeFileSync(path.join(overlay, "root-only"), "local\n");
+  fs.writeFileSync(path.join(overlay, "nested", "root-only"), "keep\n");
+  fs.writeFileSync(path.join(overlay, "kept.txt"), "keep\n");
+
+  const updated = invoke(main, "update");
+  assert.equal(updated.status, 0, updated.stderr);
+  const manifest = JSON.parse(fs.readFileSync(path.join(main, ".agent-workspaces", "manifest.json")));
+  assert.deepEqual(manifest.files, ["draftx.txt", "important.tmp", "kept.txt", "nested/root-only", "secret12.txt"]);
+
+  const linked = path.join(parent, "ignored-files-worktree");
+  git(main, "worktree", "add", "-b", "ignored-files", linked);
+  const restored = invoke(linked, "restore");
+  assert.equal(restored.status, 0, restored.stderr);
+  for (const relative of [
+    ".awsoignore",
+    "skill-lock.json",
+    "nested/skill-lock.json",
+    "nested/skill-lock.yaml",
+    "cache/state.json",
+    "scratch.tmp",
+    "draft7.txt",
+    "secret1.txt",
+    "root-only",
+  ]) {
+    assert.equal(fs.existsSync(path.join(linked, relative)), false, `${relative} should not be restored`);
+  }
+  for (const relative of manifest.files) assert.equal(fs.lstatSync(path.join(linked, relative)).isSymbolicLink(), true);
 });
 
 test("update inventories files and restore hydrates linked worktrees", (t) => {
@@ -75,7 +146,7 @@ test("update inventories files and restore hydrates linked worktrees", (t) => {
   const hook = path.join(linked, ".codex", "hooks", "before-test");
   assert.equal(fs.lstatSync(hook).isSymbolicLink(), true);
   assert.equal(fs.realpathSync(hook), path.join(overlay, ".codex", "hooks", "before-test"));
-  assert.match(fs.readFileSync(path.join(linked, "AGENTS.override.md"), "utf8"), /GENERATED BY workspace-overlay/);
+  assert.match(fs.readFileSync(path.join(linked, "AGENTS.override.md"), "utf8"), /GENERATED BY awso/);
   assert.equal(invoke(linked, "status").status, 0);
 
   fs.writeFileSync(path.join(linked, "AGENTS.md"), "# Branch instructions\n");
