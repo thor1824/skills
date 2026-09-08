@@ -104,7 +104,9 @@ repository files.
 
 Hydrates the current worktree from the manifest. It creates links to static
 overlay files and generates `AGENTS.override.md` for the current worktree.
-Foreign files, foreign links, and tracked destinations are not overwritten.
+Foreign files, foreign links, and tracked static-overlay destinations are not
+overwritten. `AGENTS.override.md` is the exception: every restore regenerates
+it, replacing an existing regular file or symlink even when Git tracks it.
 
 ### `awso status`
 
