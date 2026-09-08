@@ -61,6 +61,14 @@ awso restore
 awso status
 ```
 
+To link a whole overlay folder instead of its individual files, add its path
+relative to the overlay and restore:
+
+```sh
+awso add .config/tool
+awso restore
+```
+
 Run `awso restore` once in each additional worktree. Run `awso update` after
 adding, removing, or renaming files beneath `.agent-workspaces/overlay/`.
 
@@ -121,6 +129,24 @@ configuration is preserved.
 Inventories the static overlay, writes the sorted manifest, and updates the
 shared Git exclusions. It rejects overlay paths that collide with tracked
 repository files.
+
+### `awso add <folder>`
+
+Adds a real directory beneath `.agent-workspaces/overlay/` to the manifest as
+one entry. The path is relative to the overlay root:
+
+```sh
+awso add .config/tool
+```
+
+Existing child-file entries are replaced by the directory entry. Subsequent
+`awso update` and `awso status` calls preserve it, and `awso restore` links the
+whole directory. The command rejects missing paths, symlinked directories,
+ignored directories, and destinations containing tracked repository files.
+
+As with directory-linked skills, `.awsoignore` cannot hide individual files
+inside a directory added this way because the symlink exposes the complete
+folder.
 
 ### `awso restore`
 

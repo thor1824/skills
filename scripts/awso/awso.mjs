@@ -220,7 +220,19 @@ function ignoredByPatterns(relative, isDirectory, patterns) {
   return ignored;
 }
 
-function scanOverlay(root) {
+function manifestDirectoryEntries(root, entries) {
+  const directories = new Set();
+  for (const relative of entries) {
+    const source = path.join(root, ...relative.split("/"));
+    if (exists(source)) {
+      const stat = fs.lstatSync(source);
+      if (stat.isDirectory() && !stat.isSymbolicLink()) directories.add(relative);
+    }
+  }
+  return directories;
+}
+
+function scanOverlay(root, directoryEntries = new Set()) {
   if (!exists(root)) throw new OverlayError(`Overlay directory is missing: ${root}`);
   const ignorePatterns = readIgnorePatterns(root);
   const files = [];
@@ -231,7 +243,7 @@ function scanOverlay(root) {
       validateRelativePath(relative);
       const absolute = path.join(directory, entry.name);
       if (relative === IGNORE_FILE || ignoredByPatterns(relative, entry.isDirectory(), ignorePatterns)) continue;
-      if (entry.isDirectory() && prefix === SKILLS_DIR) files.push(relative);
+      if (entry.isDirectory() && (prefix === SKILLS_DIR || directoryEntries.has(relative))) files.push(relative);
       else if (entry.isDirectory()) visit(absolute, relative);
       else if (entry.isFile()) files.push(relative);
       else if (entry.isSymbolicLink()) {
@@ -249,6 +261,16 @@ function scanOverlay(root) {
 
 function trackedAtOrBelow(repoRoot, relative) {
   return runGit(repoRoot, ["ls-files", "--", `:(literal)${relative}`]).stdout.trim().length > 0;
+}
+
+function writeInventory(paths, entries) {
+  const nextManifest = manifestText(entries);
+  const nextExclude = expectedExclude(paths, entries);
+  const manifestChanged = fs.readFileSync(paths.manifest, "utf8") !== nextManifest;
+  const excludeChanged = !exists(paths.exclude) || fs.readFileSync(paths.exclude, "utf8") !== nextExclude;
+  if (excludeChanged) atomicWrite(paths.exclude, nextExclude);
+  if (manifestChanged) atomicWrite(paths.manifest, nextManifest);
+  return { manifestChanged, excludeChanged };
 }
 
 function managedBlock(files) {
@@ -339,19 +361,14 @@ function update(cwd) {
   const paths = workspacePaths(repo);
   assertWorkspace(paths);
   const previous = readManifest(paths.manifest).files;
-  const files = scanOverlay(paths.overlay);
+  const files = scanOverlay(paths.overlay, manifestDirectoryEntries(paths.overlay, previous));
   const conflicts = files.filter((file) => trackedAtOrBelow(repo.currentRoot, file));
   if (conflicts.length) throw new OverlayError(`Overlay paths conflict with tracked repository files:\n${conflicts.map((file) => `  ${file}`).join("\n")}`);
   const before = new Set(previous);
   const after = new Set(files);
   const added = files.filter((file) => !before.has(file));
   const removed = previous.filter((file) => !after.has(file));
-  const nextManifest = manifestText(files);
-  const nextExclude = expectedExclude(paths, files);
-  const manifestChanged = fs.readFileSync(paths.manifest, "utf8") !== nextManifest;
-  const excludeChanged = !exists(paths.exclude) || fs.readFileSync(paths.exclude, "utf8") !== nextExclude;
-  if (excludeChanged) atomicWrite(paths.exclude, nextExclude);
-  if (manifestChanged) atomicWrite(paths.manifest, nextManifest);
+  const { manifestChanged, excludeChanged } = writeInventory(paths, files);
   if (!manifestChanged && !excludeChanged) console.log(`Workspace overlay already up to date.\n\n${files.length} overlay entries\n0 added\n0 removed\n0 conflicts`);
   else {
     console.log("Workspace overlay updated.");
@@ -359,6 +376,34 @@ function update(cwd) {
     if (removed.length) console.log(`\nRemoved:\n${removed.map((file) => `  ${file}`).join("\n")}`);
     console.log(`\nCurrent overlay:\n  ${files.length} entries\n\nGit exclusions updated.`);
   }
+  return 0;
+}
+
+function add(cwd, relative) {
+  validateRelativePath(relative);
+  const repo = discoverRepository(cwd);
+  const paths = workspacePaths(repo);
+  assertWorkspace(paths);
+  const source = path.join(paths.overlay, ...relative.split("/"));
+  if (!exists(source)) throw new OverlayError(`Overlay directory is missing: ${source}`);
+  const stat = fs.lstatSync(source);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new OverlayError(`Overlay path must be a real directory: ${relative}`);
+
+  const previous = readManifest(paths.manifest).files;
+  const directories = manifestDirectoryEntries(paths.overlay, previous);
+  const ancestor = [...directories].find((directory) => relative === directory || relative.startsWith(`${directory}/`));
+  if (ancestor && ancestor !== relative) {
+    console.log(`Overlay directory is already included by:\n  ${ancestor}`);
+    return 0;
+  }
+  directories.add(relative);
+  const entries = scanOverlay(paths.overlay, directories);
+  if (!entries.includes(relative)) throw new OverlayError(`Overlay directory is ignored by ${IGNORE_FILE}: ${relative}`);
+  const conflicts = entries.filter((entry) => trackedAtOrBelow(repo.currentRoot, entry));
+  if (conflicts.length) throw new OverlayError(`Overlay paths conflict with tracked repository files:\n${conflicts.map((entry) => `  ${entry}`).join("\n")}`);
+  const { manifestChanged, excludeChanged } = writeInventory(paths, entries);
+  if (!manifestChanged && !excludeChanged) console.log(`Overlay directory already in manifest:\n  ${relative}`);
+  else console.log(`Added overlay directory to manifest:\n  ${relative}\n\nCurrent overlay:\n  ${entries.length} entries`);
   return 0;
 }
 
@@ -372,17 +417,12 @@ function overlayOwnedLink(link, relative) {
   return resolveLink(link).endsWith(`${path.sep}${suffix}`);
 }
 
-function isSkillDirectory(relative) {
-  const name = relative.startsWith(`${SKILLS_DIR}/`) ? relative.slice(SKILLS_DIR.length + 1) : "";
-  return name.length > 0 && !name.includes("/");
-}
-
-function replaceableLegacySkillDirectory(directory, sourceDirectory) {
+function replaceableLegacyOverlayDirectory(directory, sourceDirectory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const child = path.join(directory, entry.name);
     const childSource = path.join(sourceDirectory, entry.name);
     if (entry.isDirectory()) {
-      if (!replaceableLegacySkillDirectory(child, childSource)) return false;
+      if (!replaceableLegacyOverlayDirectory(child, childSource)) return false;
     } else if (!entry.isSymbolicLink() || resolveLink(child) !== childSource) return false;
   }
   return true;
@@ -391,7 +431,7 @@ function replaceableLegacySkillDirectory(directory, sourceDirectory) {
 function inspectDestination(destination, source, relative) {
   if (!exists(destination)) return { kind: "missing" };
   const stat = fs.lstatSync(destination);
-  if (stat.isDirectory() && isSkillDirectory(relative) && replaceableLegacySkillDirectory(destination, source)) {
+  if (stat.isDirectory() && fs.lstatSync(source).isDirectory() && replaceableLegacyOverlayDirectory(destination, source)) {
     return { kind: "repairable-directory" };
   }
   if (!stat.isSymbolicLink()) return { kind: "collision", detail: "a non-symlink entry exists" };
@@ -482,7 +522,7 @@ function status(cwd) {
   let actual = [];
   if (manifest) {
     try {
-      actual = scanOverlay(paths.overlay);
+      actual = scanOverlay(paths.overlay, manifestDirectoryEntries(paths.overlay, manifest.files));
       if (JSON.stringify(actual) !== JSON.stringify([...manifest.files].sort())) updateNeeded.push("manifest does not match overlay contents");
       const currentExclude = exists(paths.exclude) ? fs.readFileSync(paths.exclude, "utf8") : "";
       if (currentExclude !== expectedExclude(paths, [...manifest.files].sort())) {
@@ -532,6 +572,8 @@ function help() {
 Commands:
   setup    Initialize awso for a Git repository
   update   Synchronize the overlay manifest and Git exclusions
+  add <folder>
+           Add an overlay folder as one manifest entry
   restore  Hydrate the current worktree
   status   Check the current awso installation
   help     Show this help message`);
@@ -539,12 +581,15 @@ Commands:
 }
 
 export function main(argv = process.argv.slice(2), cwd = process.cwd()) {
-  if (argv.length !== 1 || !["setup", "update", "restore", "status", "help"].includes(argv[0])) {
-    console.error("Usage: awso <setup|update|restore|status|help>");
+  const arities = { setup: 0, update: 0, add: 1, restore: 0, status: 0, help: 0 };
+  const command = argv[0];
+  if (!Object.hasOwn(arities, command) || argv.length !== arities[command] + 1) {
+    console.error("Usage: awso <setup|update|add|restore|status|help>");
     return 3;
   }
   try {
-    return { setup, update, restore, status, help }[argv[0]](cwd);
+    if (command === "add") return add(cwd, argv[1]);
+    return { setup, update, restore, status, help }[command](cwd);
   } catch (error) {
     console.error(`ERROR: ${error.message}`);
     return error.exitCode ?? 3;

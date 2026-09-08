@@ -19,8 +19,8 @@ function git(cwd, ...args) {
   return result.stdout.trim();
 }
 
-function invoke(cwd, command) {
-  return run(process.execPath, [cli, command], cwd);
+function invoke(cwd, ...args) {
+  return run(process.execPath, [cli, ...args], cwd);
 }
 
 function fixture(t) {
@@ -42,9 +42,11 @@ test("help describes every command without requiring a repository", () => {
   assert.equal(result.status, 0);
   assert.equal(result.stderr, "");
   assert.match(result.stdout, /^Usage: awso <command>/);
-  for (const command of ["setup", "update", "restore", "status", "help"]) {
+  for (const command of ["setup", "update", "add", "restore", "status", "help"]) {
     assert.match(result.stdout, new RegExp(`^  ${command}\\s`, "m"));
   }
+  assert.match(result.stdout, /^  add <folder>$/m);
+  assert.equal(invoke(process.cwd(), "add").status, 3);
 });
 
 test("setup is idempotent and preserves personal instructions", (t) => {
@@ -156,6 +158,48 @@ test("skills are restored as directory symlinks and legacy file links are migrat
   assert.equal(fs.readFileSync(path.join(destination, "references", "notes.md"), "utf8"), "Notes\n");
   assert.equal(fs.existsSync(path.join(main, ".agents", "skills", "skill-lock.json")), false);
   assert.equal(invoke(main, "status").status, 0);
+});
+
+test("add stores an entire overlay folder as one persistent manifest entry", (t) => {
+  const { main } = fixture(t);
+  assert.equal(invoke(main, "setup").status, 0);
+  const overlay = path.join(main, ".agent-workspaces", "overlay");
+  const source = path.join(overlay, ".config", "tool");
+  fs.mkdirSync(path.join(source, "nested"), { recursive: true });
+  fs.writeFileSync(path.join(source, "config.json"), "{}\n");
+  fs.writeFileSync(path.join(source, "nested", "state.json"), "{}\n");
+  assert.equal(invoke(main, "update").status, 0);
+  assert.equal(invoke(main, "restore").status, 0);
+  const destination = path.join(main, ".config", "tool");
+  assert.equal(fs.lstatSync(destination).isDirectory(), true);
+
+  const added = invoke(main, "add", ".config/tool");
+  assert.equal(added.status, 0, added.stderr);
+  assert.match(added.stdout, /Added overlay directory to manifest/);
+  const manifestFile = path.join(main, ".agent-workspaces", "manifest.json");
+  assert.deepEqual(JSON.parse(fs.readFileSync(manifestFile, "utf8")).files, [".config/tool"]);
+
+  const restored = invoke(main, "restore");
+  assert.equal(restored.status, 0, restored.stderr);
+  assert.equal(fs.lstatSync(destination).isSymbolicLink(), true);
+  assert.equal(fs.realpathSync(destination), source);
+  assert.equal(invoke(main, "update").status, 0);
+  assert.deepEqual(JSON.parse(fs.readFileSync(manifestFile, "utf8")).files, [".config/tool"]);
+  assert.equal(invoke(main, "status").status, 0);
+});
+
+test("add rejects folders excluded by .awsoignore", (t) => {
+  const { main } = fixture(t);
+  assert.equal(invoke(main, "setup").status, 0);
+  const overlay = path.join(main, ".agent-workspaces", "overlay");
+  fs.mkdirSync(path.join(overlay, "cache"));
+  fs.writeFileSync(path.join(overlay, "cache", "state.json"), "{}\n");
+  fs.writeFileSync(path.join(overlay, ".awsoignore"), "cache/\n");
+
+  const result = invoke(main, "add", "cache");
+  assert.equal(result.status, 3);
+  assert.match(result.stderr, /ignored by \.awsoignore/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(main, ".agent-workspaces", "manifest.json"), "utf8")).files, []);
 });
 
 test("restore does not replace a foreign skill directory", (t) => {
